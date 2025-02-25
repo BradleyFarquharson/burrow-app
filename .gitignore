@@ -42,3 +42,9 @@ next-env.d.ts
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+# Firebase service account
+**/service-account*.json
+**/firebase-adminsdk*.json
+**/*-firebase-adminsdk-*.json
+**/*-service-account*.json
+**/burrow-app.json
