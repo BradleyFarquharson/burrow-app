@@ -18,6 +18,11 @@ const nextConfig = {
     // Handled by IDE/editor
     ignoreDuringBuilds: true,
   },
+  // Disable development indicators (including static route indicator)
+  devIndicators: {
+    buildActivity: false,
+    buildActivityPosition: 'bottom-right',
+  },
 };
 
 module.exports = nextConfig; 
