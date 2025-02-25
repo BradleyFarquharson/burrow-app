@@ -1,0 +1,161 @@
+/* Import Tailwind's base styles, components, and utilities */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* MONOCHROME COLOR SCHEME - LIGHT MODE */
+    /* Main backgrounds */
+    --background: 0 0% 100%; /* Pure white */
+    --foreground: 0 0% 0%; /* Pure black */
+
+    /* Card elements */
+    --card: 0 0% 98%; /* Very light gray */
+    --card-foreground: 0 0% 10%; /* Very dark gray (almost black) */
+
+    /* Popover elements */
+    --popover: 0 0% 100%; /* Pure white */
+    --popover-foreground: 0 0% 0%; /* Pure black */
+
+    /* Primary elements (buttons, active states) */
+    --primary: 0 0% 0%; /* Pure black */
+    --primary-foreground: 0 0% 100%; /* Pure white */
+
+    /* Secondary elements (less prominent UI) */
+    --secondary: 0 0% 96%; /* Light gray */
+    --secondary-foreground: 0 0% 20%; /* Dark gray */
+
+    /* Muted elements (subtle UI) */
+    --muted: 0 0% 92%; /* Light gray */
+    --muted-foreground: 0 0% 40%; /* Medium gray */
+
+    /* Accent elements (highlights) */
+    --accent: 0 0% 94%; /* Light gray */
+    --accent-foreground: 0 0% 10%; /* Very dark gray */
+
+    /* Destructive elements (errors, warnings) */
+    --destructive: 0 0% 40%; /* Medium gray */
+    --destructive-foreground: 0 0% 100%; /* Pure white */
+
+    /* Borders and inputs */
+    --border: 0 0% 85%; /* Light gray */
+    --input: 0 0% 85%; /* Light gray */
+    --ring: 0 0% 70%; /* Medium gray */
+
+    /* Chart colors (monochrome) */
+    --chart-1: 0 0% 20%; /* Dark gray */
+    --chart-2: 0 0% 40%; /* Medium-dark gray */
+    --chart-3: 0 0% 60%; /* Medium gray */
+    --chart-4: 0 0% 80%; /* Light gray */
+    --chart-5: 0 0% 90%; /* Very light gray */
+
+    /* Border radius */
+    --radius: 0.5rem
+  }
+
+  .dark {
+    /* MONOCHROME COLOR SCHEME - DARK MODE */
+    /* Main backgrounds */
+    --background: 0 0% 10%; /* Very dark gray */
+    --foreground: 0 0% 95%; /* Very light gray */
+
+    /* Card elements */
+    --card: 0 0% 15%; /* Dark gray */
+    --card-foreground: 0 0% 90%; /* Very light gray */
+
+    /* Popover elements */
+    --popover: 0 0% 10%; /* Very dark gray */
+    --popover-foreground: 0 0% 95%; /* Very light gray */
+
+    /* Primary elements (buttons, active states) */
+    --primary: 0 0% 95%; /* Very light gray */
+    --primary-foreground: 0 0% 10%; /* Very dark gray */
+
+    /* Secondary elements (less prominent UI) */
+    --secondary: 0 0% 20%; /* Dark gray */
+    --secondary-foreground: 0 0% 90%; /* Very light gray */
+
+    /* Muted elements (subtle UI) */
+    --muted: 0 0% 25%; /* Dark gray */
+    --muted-foreground: 0 0% 70%; /* Light gray */
+
+    /* Accent elements (highlights) */
+    --accent: 0 0% 25%; /* Dark gray */
+    --accent-foreground: 0 0% 95%; /* Very light gray */
+
+    /* Destructive elements (errors, warnings) */
+    --destructive: 0 0% 60%; /* Medium gray */
+    --destructive-foreground: 0 0% 10%; /* Very dark gray */
+
+    /* Borders and inputs */
+    --border: 0 0% 30%; /* Dark gray */
+    --input: 0 0% 30%; /* Dark gray */
+    --ring: 0 0% 70%; /* Light gray */
+
+    /* Chart colors (monochrome) */
+    --chart-1: 0 0% 90%; /* Very light gray */
+    --chart-2: 0 0% 70%; /* Light gray */
+    --chart-3: 0 0% 50%; /* Medium gray */
+    --chart-4: 0 0% 30%; /* Dark gray */
+    --chart-5: 0 0% 10%; /* Very dark gray */
+  }
+}
+
+/* Apply base styles to elements */
+@layer base {
+  /* Set default border color and outline style for all elements */
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  /* Set the background and text color for the body */
+  body {
+    @apply bg-background text-foreground;
+    /* Prevent browser zoom */
+    touch-action: pan-x pan-y;
+    -ms-touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  
+  /* Disable zooming for specific elements */
+  html, body, #__next, .prevent-zoom {
+    touch-action: pan-x pan-y;
+    -ms-touch-action: pan-x pan-y;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    /* Enhanced zoom prevention */
+    max-height: 100%;
+    overflow: hidden;
+    /* Prevent iOS text size adjustment */
+    -webkit-text-size-adjust: none !important;
+    text-size-adjust: none !important;
+  }
+  
+  /* Global zoom prevention for all elements */
+  * {
+    /* Prevents pinch zooming on some browsers */
+    touch-action: manipulation;
+  }
+
+  /* Additional canvas-specific handling */
+  .prevent-zoom {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    touch-action: none !important;
+    -ms-touch-action: none !important;
+    -ms-content-zooming: none !important;
+    -ms-touch-select: none !important;
+    -moz-user-select: none !important;
+    zoom: reset !important;
+    min-height: 100%;
+    min-width: 100%;
+  }
+}

@@ -1,0 +1,456 @@
+'use client';
+
+import { useExplorationStore } from '@/store/explorationStore';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { motion, useMotionValue, useTransform, MotionValue } from 'framer-motion';
+import { Node, Connection } from '@/types';
+
+// Import refactored hooks
+import { useCanvasGestures, useNodeDragging, useZoomControls } from '@/hooks';
+
+// Import refactored components
+import ExploreNode from './canvas/ExploreNode';
+import BranchNode from './canvas/BranchNode';
+import NodeConnection from './canvas/NodeConnection';
+import ZoomControls from './canvas/ZoomControls';
+import { ZoomProvider } from '@/contexts';
+
+/**
+ * Canvas Component
+ * 
+ * The main interactive canvas where nodes are displayed and manipulated.
+ * Provides an infinite space for visualizing node networks with high-performance
+ * interaction capabilities.
+ * 
+ * @features
+ * - Infinite panning and zooming with hardware acceleration
+ * - Individual node dragging without affecting canvas position
+ * - Background remains fixed while dragging individual nodes
+ * - Entire canvas can be panned while nodes remain fixed relative to each other
+ * - Smooth zooming with proper focus point preservation
+ * - Touch and mouse gesture support
+ * - Performance optimizations for large node networks
+ * 
+ * @returns React component that renders the interactive canvas
+ */
+export default function Canvas(): React.ReactElement {
+  const { nodes, connections, activeNodeId, updateNodePosition, setActiveNode } = useExplorationStore();
+  
+  // Use motion values for better performance with hardware acceleration
+  const scale = useMotionValue<number>(1);
+  const x = useMotionValue<number>(0);
+  const y = useMotionValue<number>(0);
+  
+  // Display values (for UI only, not for render calculations)
+  const [displayScale, setDisplayScale] = useState<number>(1);
+  
+  // Track interaction states
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  
+  // Track client-side rendering to avoid hydration errors
+  const [isClient, setIsClient] = useState<boolean>(false);
+  
+  // Use refs for animation and performance
+  const containerRef = useRef<HTMLDivElement>(null);
+  const transformRef = useRef<HTMLDivElement>(null);
+  
+  // Use custom hooks for functionality
+  const { draggingNodeId, handleNodeMouseDown } = useNodeDragging({
+    scale,
+    setActiveNode,
+    updateNodePosition
+  });
+  
+  const { handleZoomButton, resetView } = useZoomControls({
+    scale,
+    x,
+    y,
+    containerRef,
+    nodes,
+    activeNodeId
+  });
+  
+  /**
+   * Handles canvas panning by updating motion values
+   * 
+   * @param dx - Delta X movement in pixels
+   * @param dy - Delta Y movement in pixels 
+   */
+  const handlePan = useCallback((dx: number, dy: number): void => {
+    // Apply direct value update for smoother panning
+    const newX = x.get() + dx;
+    const newY = y.get() + dy;
+    
+    // Update position values
+    x.set(newX);
+    y.set(newY);
+  }, [x, y]);
+  
+  /**
+   * Handles canvas zooming with focus point preservation
+   * 
+   * Calculates the appropriate scale and position to maintain the point under
+   * the cursor/touch in the same relative position after zooming.
+   * 
+   * @param zoomFactor - Scale multiplier (>1 to zoom in, <1 to zoom out)
+   * @param clientX - Optional X coordinate of zoom focus point
+   * @param clientY - Optional Y coordinate of zoom focus point
+   */
+  const handleZoom = useCallback((zoomFactor: number, clientX?: number, clientY?: number): void => {
+    if (!containerRef.current) return;
+    
+    // Get current values
+    const currentScale = scale.get();
+    const currentX = x.get();
+    const currentY = y.get();
+    
+    // Calculate next scale with limits (0.1 to 5)
+    const nextScale = Math.min(5, Math.max(0.1, currentScale * zoomFactor));
+    
+    if (nextScale !== currentScale && clientX !== undefined && clientY !== undefined) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const mouseX = clientX - rect.left;
+      const mouseY = clientY - rect.top;
+      
+      // Calculate point position in world space
+      const pointX = (mouseX - currentX) / currentScale;
+      const pointY = (mouseY - currentY) / currentScale;
+      
+      // Calculate new position to zoom toward mouse
+      const newX = mouseX - pointX * nextScale;
+      const newY = mouseY - pointY * nextScale;
+      
+      // Update values
+      scale.set(nextScale);
+      x.set(newX);
+      y.set(newY);
+    } else {
+      // Simple zoom without position adjustment
+      scale.set(nextScale);
+    }
+  }, [containerRef, scale, x, y]);
+  
+  // Set up gesture handling
+  const bindGestures = useCanvasGestures({
+    containerRef,
+    x,
+    y,
+    scale,
+    setIsDragging,
+    draggingNodeId,
+    onPan: handlePan,
+    onZoom: handleZoom
+  });
+  
+  // Set isClient to true after component mounts
+  useEffect(() => {
+    setIsClient(true);
+    
+    // Reset view on initial load to center the active node
+    if (activeNodeId && nodes[activeNodeId]) {
+      setTimeout(() => resetView(), 100);
+    }
+    
+    // Force hardware acceleration for the entire canvas
+    if (containerRef.current) {
+      containerRef.current.style.transform = 'translateZ(0)';
+      containerRef.current.style.backfaceVisibility = 'hidden';
+    }
+    
+    // Enhanced zoom prevention system
+    /**
+     * Prevents default zoom behavior from browser events
+     * 
+     * @param e - The event to prevent default behavior for
+     * @returns false to indicate the event was handled
+     */
+    const preventDefaultForZoom = (e: Event): boolean => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+    
+    /**
+     * Prevents keyboard-triggered zoom shortcuts
+     * 
+     * Detects and blocks all common keyboard shortcuts used for zooming:
+     * Ctrl/Cmd + [+, -, =, 0, _] and their numpad equivalents
+     * 
+     * @param e - Keyboard event to process
+     * @returns false if a zoom shortcut was detected and prevented
+     */
+    const preventKeyboardZoom = (e: KeyboardEvent): boolean | undefined => {
+      // Cover all known zoom keyboard shortcuts
+      if ((e.ctrlKey || e.metaKey) && (
+        e.key === '=' || 
+        e.key === '-' || 
+        e.key === '0' || 
+        e.key === '+' ||
+        e.key === '_' ||
+        e.keyCode === 107 || // numpad +
+        e.keyCode === 109 || // numpad -
+        e.keyCode === 187 || // = key
+        e.keyCode === 189    // - key
+      )) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      
+      return undefined;
+    };
+    
+    /**
+     * Prevents wheel-triggered zoom gestures
+     * 
+     * Detects and blocks pinch zoom gestures that come through as wheel events,
+     * particularly when combined with Ctrl/Cmd keys.
+     * 
+     * @param e - Wheel event to process
+     * @returns false if a zoom gesture was detected and prevented
+     */
+    const preventWheelZoom = (e: WheelEvent): boolean | undefined => {
+      // Check for pinch zoom gestures which often come through as wheel + ctrl
+      if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > 10) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+      
+      return undefined;
+    };
+    
+    // Add event listeners with proper options to ensure they work
+    window.addEventListener('wheel', preventWheelZoom as EventListener, { passive: false, capture: true });
+    window.addEventListener('keydown', preventKeyboardZoom, { passive: false });
+    window.addEventListener('gesturestart', preventDefaultForZoom, { passive: false });
+    window.addEventListener('gesturechange', preventDefaultForZoom, { passive: false });
+    window.addEventListener('gestureend', preventDefaultForZoom, { passive: false });
+    
+    /**
+     * Prevents touchend-triggered zoom gestures
+     * 
+     * @param e - Touch event to process
+     */
+    const preventTouchendZoom = (e: TouchEvent): void => {
+      if (e.touches.length === 0) {
+        e.preventDefault();
+      }
+    };
+    
+    // Prevent double-tap to zoom
+    document.addEventListener('touchend', preventTouchendZoom, { passive: false });
+    
+    /**
+     * Prevents pinch-to-zoom gestures on touchmove
+     * 
+     * Detects multi-touch gestures (like pinch) and prevents the default browser
+     * behavior which would trigger zoom.
+     * 
+     * @param e - Touch event to process
+     */
+    const preventTouchZoom = (e: TouchEvent): void => {
+      // More aggressively prevent touch zoom when multiple touches detected
+      if (e.touches.length > 1) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    
+    // Add the touchmove listener with the right options
+    window.addEventListener('touchmove', preventTouchZoom as EventListener, { passive: false, capture: true });
+    
+    /**
+     * Prevents double-tap zoom by tracking tap timing
+     * 
+     * @param e - Touch event to process
+     */
+    const handleTouchStart = (e: TouchEvent): void => {
+      const now = Date.now();
+      if (now - lastTapTime < 300) {
+        // Double tap detected, prevent default behavior
+        e.preventDefault();
+      }
+      lastTapTime = now;
+    };
+    
+    // For double tap zoom prevention
+    let lastTapTime = 0;
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    
+    return () => {
+      // Clean up all event listeners
+      window.removeEventListener('wheel', preventWheelZoom as EventListener, { capture: true });
+      window.removeEventListener('keydown', preventKeyboardZoom);
+      window.removeEventListener('gesturestart', preventDefaultForZoom);
+      window.removeEventListener('gesturechange', preventDefaultForZoom);
+      window.removeEventListener('gestureend', preventDefaultForZoom);
+      window.removeEventListener('touchmove', preventTouchZoom as EventListener, { capture: true });
+      document.removeEventListener('touchend', preventTouchendZoom);
+      document.removeEventListener('touchstart', handleTouchStart);
+    };
+  }, []);
+  
+  // Update display scale for UI only
+  useEffect(() => {
+    const unsubscribeScale = scale.on('change', (value) => {
+      setDisplayScale(value);
+    });
+    
+    return () => {
+      unsubscribeScale();
+    };
+  }, [scale]);
+  
+  // Memoize the connections to prevent unnecessary re-renders
+  const memoizedConnections = useMemo(() => {
+    return connections.map((connection) => {
+      const sourceNode = nodes[connection.source];
+      const targetNode = nodes[connection.target];
+      
+      if (!sourceNode || !targetNode) return null;
+      
+      return (
+        <NodeConnection 
+          key={`${connection.source}-${connection.target}`}
+          sourceNode={sourceNode}
+          targetNode={targetNode}
+          scale={displayScale}
+        />
+      );
+    });
+  }, [connections, nodes, displayScale]);
+  
+  /**
+   * Renders an individual node with its proper positioning and styling
+   * 
+   * Handles the visual representation and interaction handling for a single node,
+   * including transform positioning, scale adjustments, and interaction states.
+   * 
+   * @param node - The node data to render
+   * @returns React element representing the node with proper position and styling
+   */
+  const renderNode = (node: Node): React.ReactElement => {
+    const isActive = node.id === activeNodeId;
+    const isDragging = draggingNodeId === node.id;
+    
+    return (
+      <div 
+        key={node.id}
+        data-node-id={node.id}
+        style={{ 
+          position: 'absolute',
+          left: node.position.x,
+          top: node.position.y,
+          transform: `translate(-50%, -50%) scale(${displayScale})`,
+          transformOrigin: 'center',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          // All nodes have the same z-index unless being dragged
+          zIndex: isDragging ? 10 : 1,
+          // Only show shadow when dragging
+          filter: isDragging ? 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15))' : 'none',
+          willChange: 'transform',
+          transition: isDragging ? 'none' : 'filter 0.2s ease'
+        }}
+        onMouseDown={(e: React.MouseEvent): void => handleNodeMouseDown(e, node)}
+        onTouchStart={(e: React.TouchEvent): void => {
+          // Convert touch event to mouse event for compatibility
+          const touch = e.touches[0];
+          const mouseEvent = {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            stopPropagation: () => e.stopPropagation()
+          } as React.MouseEvent;
+          handleNodeMouseDown(mouseEvent, node);
+        }}
+      >
+        {node.type === 'explore' ? (
+          <ExploreNode
+            node={node}
+            isActive={isActive}
+          />
+        ) : (
+          <BranchNode
+            node={node}
+            isActive={isActive}
+          />
+        )}
+      </div>
+    );
+  };
+  
+  // Memoize the nodes to prevent unnecessary re-renders
+  const memoizedNodes = useMemo<React.ReactElement[]>(() => {
+    return Object.values(nodes).map(renderNode);
+  }, [
+    nodes, 
+    activeNodeId, 
+    draggingNodeId, 
+    displayScale, 
+    // Exclude scale since we already use displayScale which is derived from it
+    // Remove handleNodeMouseDown from dependencies as it doesn't change between renders
+  ]);
+  
+  // Wrap everything in the ZoomProvider
+  return (
+    <ZoomProvider scale={scale} x={x} y={y} nodes={nodes}>
+      <div 
+        ref={containerRef}
+        className="relative w-full h-screen overflow-hidden bg-background"
+        style={{ 
+          touchAction: 'none',
+          // Ensure the container has a minimum height for visibility
+          minHeight: '100vh'
+        }}
+        data-canvas="true"
+        {...bindGestures}
+        // Click on empty space to deselect nodes
+        onClick={() => setActiveNode('')}
+      >
+        {/* Static dot grid background - fixed and not affected by any movement */}
+        <div 
+          className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none"
+          style={{
+            backgroundImage: `radial-gradient(circle, rgba(128, 128, 128, 0.15) 2px, transparent 2px)`,
+            backgroundSize: `40px 40px`,
+            backgroundPosition: `0px 0px`,
+            zIndex: 1
+          }}
+        />
+        
+        {isClient && (
+          <>
+            {/* Canvas content with scaling and translation */}
+            <motion.div 
+              ref={transformRef}
+              className="absolute top-0 left-0 w-full h-full z-10"
+              style={{ 
+                x, 
+                y,
+                scale,
+                transformOrigin: 'center',
+                willChange: 'transform'
+              }}
+            >
+              {/* Draw connections first (behind nodes) */}
+              {memoizedConnections}
+              
+              {/* Draw nodes */}
+              {memoizedNodes}
+            </motion.div>
+            
+            {/* Zoom Controls - fixed position */}
+            <div className="absolute bottom-4 right-4 z-20">
+              <ZoomControls 
+                displayScale={displayScale}
+                onZoomIn={() => handleZoomButton(true)}
+                onZoomOut={() => handleZoomButton(false)}
+                onReset={resetView}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </ZoomProvider>
+  );
+} 
