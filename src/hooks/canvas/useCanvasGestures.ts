@@ -1,3 +1,5 @@
+'use client';
+
 import { MutableRefObject, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useGesture } from '@use-gesture/react';
 import { MotionValue, useSpring } from 'framer-motion';

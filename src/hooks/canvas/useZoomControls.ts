@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback } from 'react';
 import { MotionValue, animate } from 'framer-motion';
 import { MutableRefObject } from 'react';
@@ -60,9 +62,14 @@ export function useZoomControls({
     
     if (node) {
       // Use framer-motion's animate for smooth transitions
-      animate(x, window.innerWidth / 2 - node.position.x);
-      animate(y, window.innerHeight / 2 - node.position.y);
-      animate(scale, 1);
+      animate(x, window.innerWidth / 2 - node.position.x, { duration: 0.5 });
+      animate(y, window.innerHeight / 2 - node.position.y, { duration: 0.5 });
+      animate(scale, 1, { duration: 0.5 });
+    } else {
+      // If no node is found or active, just reset to center and default scale
+      animate(x, 0, { duration: 0.5 });
+      animate(y, 0, { duration: 0.5 });
+      animate(scale, 1, { duration: 0.5 });
     }
   }, [nodes, activeNodeId, x, y, scale]);
   

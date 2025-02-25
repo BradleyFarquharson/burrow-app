@@ -4,54 +4,86 @@
 @tailwind utilities;
 
 @layer base {
+  /* Add transition for all theme-related properties */
+  :root, .dark {
+    /* Apply transitions to all color properties */
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms; /* Faster transition for root elements */
+  }
+  
+  /* Apply transitions to all elements */
+  * {
+    /* Shorter list of properties with faster transition for text */
+    transition-property: color, background-color, border-color;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms; /* Faster transition for all elements */
+  }
+  
+  /* Text-specific faster transitions */
+  p, h1, h2, h3, h4, h5, h6, span, a, button, input, textarea, select, label {
+    transition-duration: 100ms; /* Even faster for text elements */
+  }
+  
+  /* Exclude transitions from certain elements where it might cause issues */
+  .no-transition, .no-transition * {
+    transition: none !important;
+  }
+  
+  /* Apply immediate transition to active elements */
+  .active, .active * {
+    transition-duration: 0ms !important;
+  }
+  
   :root {
-    /* MONOCHROME COLOR SCHEME - LIGHT MODE */
+    /* MONOCHROME COLOR SCHEME - EXTRA CREAMY LIGHT MODE */
     /* Main backgrounds */
-    --background: 0 0% 100%; /* Pure white */
-    --foreground: 0 0% 0%; /* Pure black */
+    --background: 42 60% 90%; /* Ultra creamy background, less bright */
+    --foreground: 35 30% 5%; /* Even darker text for better readability */
 
     /* Card elements */
-    --card: 0 0% 98%; /* Very light gray */
-    --card-foreground: 0 0% 10%; /* Very dark gray (almost black) */
+    --card: 40 55% 93%; /* Creamier card background, less bright */
+    --card-foreground: 35 30% 5%; /* Darker text for even better contrast */
 
     /* Popover elements */
-    --popover: 0 0% 100%; /* Pure white */
-    --popover-foreground: 0 0% 0%; /* Pure black */
+    --popover: 42 60% 90%; /* Ultra creamy background */
+    --popover-foreground: 35 30% 5%; /* Darker text */
 
     /* Primary elements (buttons, active states) */
-    --primary: 0 0% 0%; /* Pure black */
-    --primary-foreground: 0 0% 100%; /* Pure white */
+    --primary: 35 30% 5%; /* Very dark warm brown */
+    --primary-foreground: 40 55% 93%; /* Creamy text on dark elements */
 
     /* Secondary elements (less prominent UI) */
-    --secondary: 0 0% 96%; /* Light gray */
-    --secondary-foreground: 0 0% 20%; /* Dark gray */
+    --secondary: 40 50% 88%; /* Creamier secondary, less bright */
+    --secondary-foreground: 35 30% 15%; /* Dark warm brown */
 
     /* Muted elements (subtle UI) */
-    --muted: 0 0% 92%; /* Light gray */
-    --muted-foreground: 0 0% 40%; /* Medium gray */
+    --muted: 38 45% 84%; /* Creamier muted, less bright */
+    --muted-foreground: 35 25% 30%; /* Darker medium-warm brown */
 
     /* Accent elements (highlights) */
-    --accent: 0 0% 94%; /* Light gray */
-    --accent-foreground: 0 0% 10%; /* Very dark gray */
+    --accent: 39 55% 86%; /* Creamier accent, less bright */
+    --accent-foreground: 35 30% 5%; /* Darker text */
 
     /* Destructive elements (errors, warnings) */
-    --destructive: 0 0% 40%; /* Medium gray */
-    --destructive-foreground: 0 0% 100%; /* Pure white */
+    --destructive: 35 25% 30%; /* Darker warm brown */
+    --destructive-foreground: 40 55% 93%; /* Creamy text */
 
     /* Borders and inputs */
-    --border: 0 0% 85%; /* Light gray */
-    --input: 0 0% 85%; /* Light gray */
-    --ring: 0 0% 70%; /* Medium gray */
+    --border: 38 45% 78%; /* Creamier border, less bright */
+    --input: 38 45% 78%; /* Creamier input, less bright */
+    --ring: 38 45% 60%; /* Creamier ring, less bright */
 
-    /* Chart colors (monochrome) */
-    --chart-1: 0 0% 20%; /* Dark gray */
-    --chart-2: 0 0% 40%; /* Medium-dark gray */
-    --chart-3: 0 0% 60%; /* Medium gray */
-    --chart-4: 0 0% 80%; /* Light gray */
-    --chart-5: 0 0% 90%; /* Very light gray */
+    /* Chart colors (monochrome with warm tint) */
+    --chart-1: 35 30% 15%; /* Dark warm brown */
+    --chart-2: 35 25% 30%; /* Medium-dark warm brown */
+    --chart-3: 35 20% 50%; /* Medium warm brown */
+    --chart-4: 38 35% 70%; /* Light warm cream */
+    --chart-5: 38 45% 84%; /* Creamier light warm cream */
 
-    /* Border radius */
-    --radius: 0.5rem
+    /* Border radius - single source of truth */
+    --radius: 0.5rem;
+    --radius-full: 9999px;
   }
 
   .dark {
@@ -99,6 +131,8 @@
     --chart-3: 0 0% 50%; /* Medium gray */
     --chart-4: 0 0% 30%; /* Dark gray */
     --chart-5: 0 0% 10%; /* Very dark gray */
+    
+    /* Border radius - inherits from root */
   }
 }
 

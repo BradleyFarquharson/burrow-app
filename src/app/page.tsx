@@ -1,6 +1,7 @@
 'use client';
+
 import Canvas from '@/components/Canvas';
-import ChatHistory from '@/components/ChatHistory';
+import SidePanel from '@/components/SidePanel';
 import { useExplorationStore } from '@/store/explorationStore';
 
 export default function Home() {
@@ -8,8 +9,8 @@ export default function Home() {
   
   return (
     <main className="flex min-h-screen flex-col bg-background text-foreground">
-      {/* Chat history panel */}
-      <ChatHistory />
+      {/* Side panel with exploration history and settings */}
+      <SidePanel />
       
       {/* Main canvas area */}
       <div className="flex-grow relative">

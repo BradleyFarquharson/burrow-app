@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { MotionValue } from 'framer-motion';
 import { Node } from '@/types';

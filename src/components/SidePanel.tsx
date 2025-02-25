@@ -4,8 +4,11 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExplorationStore } from '@/store/explorationStore';
-import { ChevronRight, MessageSquare, X, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { ChevronRight, MessageSquare, X, Trash2, Plus, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface ChatMessage {
   id: string;
@@ -13,10 +16,14 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export default function ChatHistory() {
+export default function SidePanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [expandedExplorations, setExpandedExplorations] = useState<Record<string, boolean>>({});
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { signOut } = useAuth();
+  const router = useRouter();
+  const { theme, toggleTheme, isLoaded, isChanging } = useTheme();
   
   const { 
     nodes, 
@@ -110,8 +117,21 @@ export default function ChatHistory() {
     return exploration.title;
   };
   
-  // Don't render content until client-side
-  if (!mounted) {
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await signOut();
+      // Explicitly redirect to login page
+      router.push('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      setIsLoggingOut(false);
+    }
+  };
+  
+  // Don't render content until client-side and theme is loaded
+  if (!mounted || !isLoaded) {
     return <div className="fixed top-0 left-0 h-full z-10 w-14"></div>;
   }
   
@@ -125,7 +145,7 @@ export default function ChatHistory() {
         <Button 
           variant="secondary" 
           size="lg" 
-          className="absolute top-4 left-3 z-20 shadow-md rounded-full h-10 w-10 flex items-center justify-center"
+          className="absolute top-4 left-3 z-20 shadow-md rounded-md h-10 w-10 flex items-center justify-center"
           onClick={() => setIsOpen(true)}
         >
           <MessageSquare className="h-5 w-5" />
@@ -134,7 +154,7 @@ export default function ChatHistory() {
       
       {/* Panel content */}
       <div className={cn(
-        "h-full bg-card border-r border-border shadow-lg transition-opacity",
+        "h-full bg-card border-r border-border shadow-lg transition-opacity flex flex-col",
         isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
       )}>
         {/* Header with title and close button on the right */}
@@ -163,7 +183,7 @@ export default function ChatHistory() {
           </Button>
         </div>
         
-        <ScrollArea className="h-[calc(100%-116px)]">
+        <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             {Object.keys(explorations).length > 0 ? (
               Object.entries(explorations).map(([explorationId, exploration]) => (
@@ -259,6 +279,59 @@ export default function ChatHistory() {
             )}
           </div>
         </ScrollArea>
+        
+        {/* Footer with theme toggle and logout button */}
+        <div className="p-3 border-t border-border mt-auto space-y-2">
+          {/* Theme toggle button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className={cn(
+              "w-full gap-2 text-muted-foreground hover:text-foreground",
+              isChanging && "opacity-70 pointer-events-none"
+            )}
+            onClick={toggleTheme}
+            disabled={isChanging}
+          >
+            {isChanging ? (
+              <>
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-b-2 border-t-2 border-current"></div>
+                <span>Changing...</span>
+              </>
+            ) : theme === 'light' ? (
+              <>
+                <Moon className="h-3.5 w-3.5" />
+                <span>Dark Mode</span>
+              </>
+            ) : (
+              <>
+                <Sun className="h-3.5 w-3.5" />
+                <span>Light Mode</span>
+              </>
+            )}
+          </Button>
+          
+          {/* Logout button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full gap-2 text-muted-foreground hover:text-foreground"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? (
+              <>
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-b-2 border-t-2 border-current"></div>
+                <span>Signing Out...</span>
+              </>
+            ) : (
+              <>
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Sign Out</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

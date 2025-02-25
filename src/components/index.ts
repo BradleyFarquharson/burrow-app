@@ -1,13 +1,7 @@
-// Export main components directly
+// Export components directly
 export { default as Canvas } from './Canvas';
-export { default as ChatHistory } from './ChatHistory';
-
-// Export canvas components individually to avoid case sensitivity issue
-export {
-  ExploreNode,
-  BranchNode,
-  NodeConnection,
-  InfiniteGrid,
-  ZoomControls,
-  DragHandle
-} from './canvas'; 
+export { default as SidePanel } from './SidePanel';
+export { default as InfiniteGrid } from './canvas/InfiniteGrid';
+export { default as NodeConnection } from './canvas/NodeConnection';
+export { default as ZoomControls } from './canvas/ZoomControls';
+export { default as DragHandle } from './canvas/DragHandle'; 
