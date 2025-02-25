@@ -28,7 +28,7 @@ export default function ProfilePage() {
           </div>
         </header>
         <main className="flex flex-1 items-center justify-center p-4">
-          <div className="w-full max-w-md space-y-8 rounded-xl bg-card p-8 shadow-lg">
+          <div className="w-full max-w-md space-y-8 rounded-lg bg-card p-8 shadow-lg">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-card-foreground">Your Profile</h2>
             </div>

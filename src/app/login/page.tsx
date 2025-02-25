@@ -34,7 +34,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md space-y-8 rounded-xl bg-card p-8 shadow-lg">
+      <div className="w-full max-w-md space-y-8 rounded-lg bg-card p-8 shadow-lg">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-foreground">Burrow</h1>
           <h2 className="mt-6 text-2xl font-bold text-foreground">Sign in to your account</h2>
