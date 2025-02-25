@@ -49,6 +49,8 @@ const createDefaultExploration = (): Exploration => {
         content: 'Start your exploration here...',
         type: 'explore',
         position: { x: DEFAULT_X, y: DEFAULT_Y },
+        width: 240, // w-60 = 15rem = 240px at default font size
+        height: 140, // Explore nodes might be slightly taller
         // No question field by default - this will show the initial state
       },
     },

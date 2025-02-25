@@ -39,34 +39,34 @@
     /* MONOCHROME COLOR SCHEME - EXTRA CREAMY LIGHT MODE */
     /* Main backgrounds */
     --background: 42 60% 90%; /* Ultra creamy background, less bright */
-    --foreground: 35 30% 5%; /* Even darker text for better readability */
+    --foreground: 35 25% 30%; /* Updated: Lighter text using muted-foreground value */
 
     /* Card elements */
     --card: 40 55% 93%; /* Creamier card background, less bright */
-    --card-foreground: 35 30% 5%; /* Darker text for even better contrast */
+    --card-foreground: 35 25% 30%; /* Updated: Lighter text using muted-foreground value */
 
     /* Popover elements */
     --popover: 42 60% 90%; /* Ultra creamy background */
-    --popover-foreground: 35 30% 5%; /* Darker text */
+    --popover-foreground: 35 25% 30%; /* Updated: Lighter text using muted-foreground value */
 
     /* Primary elements (buttons, active states) */
-    --primary: 35 30% 5%; /* Very dark warm brown */
+    --primary: 35 25% 30%; /* Updated: Using the same color for consistency */
     --primary-foreground: 40 55% 93%; /* Creamy text on dark elements */
 
     /* Secondary elements (less prominent UI) */
     --secondary: 40 50% 88%; /* Creamier secondary, less bright */
-    --secondary-foreground: 35 30% 15%; /* Dark warm brown */
+    --secondary-foreground: 35 25% 30%; /* Updated: Lighter text using muted-foreground value */
 
     /* Muted elements (subtle UI) */
     --muted: 38 45% 84%; /* Creamier muted, less bright */
-    --muted-foreground: 35 25% 30%; /* Darker medium-warm brown */
+    --muted-foreground: 35 25% 30%; /* Unchanged: Already has the desired value */
 
     /* Accent elements (highlights) */
     --accent: 39 55% 86%; /* Creamier accent, less bright */
-    --accent-foreground: 35 30% 5%; /* Darker text */
+    --accent-foreground: 35 25% 30%; /* Updated: Lighter text using muted-foreground value */
 
     /* Destructive elements (errors, warnings) */
-    --destructive: 35 25% 30%; /* Darker warm brown */
+    --destructive: 35 25% 30%; /* Unchanged: Already has the desired value */
     --destructive-foreground: 40 55% 93%; /* Creamy text */
 
     /* Borders and inputs */
@@ -75,8 +75,8 @@
     --ring: 38 45% 60%; /* Creamier ring, less bright */
 
     /* Chart colors (monochrome with warm tint) */
-    --chart-1: 35 30% 15%; /* Dark warm brown */
-    --chart-2: 35 25% 30%; /* Medium-dark warm brown */
+    --chart-1: 35 25% 30%; /* Updated: Using the same color for consistency */
+    --chart-2: 35 25% 45%; /* Medium-dark warm brown - lightened slightly */
     --chart-3: 35 20% 50%; /* Medium warm brown */
     --chart-4: 38 35% 70%; /* Light warm cream */
     --chart-5: 38 45% 84%; /* Creamier light warm cream */
@@ -191,5 +191,35 @@
     zoom: reset !important;
     min-height: 100%;
     min-width: 100%;
+  }
+  
+  /* Node selection glow effect - applies to all node types */
+  [data-node-id].node-active .card-container,
+  [data-node-id].node-active {
+    /* Box shadow for the glow effect */
+    box-shadow: 0 0 15px 5px hsla(var(--muted-foreground)/0.12), 
+                0 0 6px 2px hsla(var(--muted-foreground)/0.15);
+    /* Subtle border glow */
+    border-color: hsla(var(--muted-foreground)/0.3);
+    /* Ensures smooth transition */
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    /* Match card border radius but only apply to the card itself */
+    border-radius: calc(var(--radius) - 2px);
+  }
+  
+  /* Apply rounded borders to just the card container */
+  [data-node-id].node-active .card-container {
+    overflow: hidden; /* Safe to use overflow hidden just on the card */
+  }
+  
+  /* Dark mode adjustments for the glow */
+  .dark [data-node-id].node-active .card-container,
+  .dark [data-node-id].node-active {
+    /* More subtle glow for dark mode */
+    box-shadow: 0 0 18px 6px hsla(var(--primary)/0.1), 
+                0 0 8px 2px hsla(var(--primary)/0.15);
+    border-color: hsla(var(--primary)/0.35);
+    /* Match card border radius */
+    border-radius: calc(var(--radius) - 2px);
   }
 }

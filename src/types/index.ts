@@ -5,6 +5,8 @@ export interface Node {
   position: Position;
   description?: string;
   question?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface Position {

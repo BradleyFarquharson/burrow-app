@@ -143,9 +143,9 @@ export default function SidePanel() {
       {/* Toggle button - only visible when sidebar is closed */}
       {!isOpen && (
         <Button 
-          variant="secondary" 
+          variant="ghost" 
           size="lg" 
-          className="absolute top-4 left-3 z-20 shadow-md rounded-md h-10 w-10 flex items-center justify-center"
+          className="absolute top-4 left-3 z-20 shadow-md rounded-md h-10 w-10 flex items-center justify-center bg-card border border-border"
           onClick={() => setIsOpen(true)}
         >
           <MessageSquare className="h-5 w-5" />

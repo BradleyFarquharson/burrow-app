@@ -19,15 +19,28 @@ export function useGemini() {
         body: JSON.stringify({ prompt: question }),
       });
 
-      const data = await response.json() as GeminiResponse;
+      // Check if the response is OK
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Validate the response structure
+      if (!data || !data.answer || !Array.isArray(data.branches)) {
+        console.error('Invalid response structure:', data);
+        throw new Error('Invalid response structure from API');
+      }
       
       // Create branch nodes from suggestions
-      const branches = data.branches.map((branch: Branch, index: number) => ({
+      const branches = (data.branches || []).map((branch: Branch, index: number) => ({
         id: uuidv4(),
-        content: branch.title,
-        description: branch.description,
+        content: branch.title || 'Explore this idea',
+        description: branch.description || 'No description available',
         type: 'branch' as const,
         position: calculatePosition(parentId || 'explore', index, data.branches.length),
+        width: 240, // w-60 = 15rem = 240px at default font size
+        height: 128, // Approximate height for branch nodes
       }));
 
       setIsLoading(false);
@@ -35,17 +48,51 @@ export function useGemini() {
     } catch (error) {
       console.error('Error generating ideas:', error);
       setIsLoading(false);
+      
+      // Create fallback branches for error cases
+      const fallbackBranches = [
+        {
+          id: uuidv4(),
+          content: 'Try again',
+          description: 'Sometimes the AI needs another attempt',
+          type: 'branch' as const,
+          position: calculatePosition(parentId || 'explore', 0, 3),
+          width: 240,
+          height: 128,
+        },
+        {
+          id: uuidv4(),
+          content: 'Rephrase your question',
+          description: 'Try asking in a different way',
+          type: 'branch' as const,
+          position: calculatePosition(parentId || 'explore', 1, 3),
+          width: 240,
+          height: 128,
+        },
+        {
+          id: uuidv4(),
+          content: 'Check your connection',
+          description: 'Make sure you have internet access',
+          type: 'branch' as const,
+          position: calculatePosition(parentId || 'explore', 2, 3),
+          width: 240,
+          height: 128,
+        },
+      ];
+      
       return { 
-        answer: "Sorry, I couldn't generate ideas at this time.", 
-        branches: [] 
+        answer: "Sorry, I couldn't generate ideas at this time. Please try again or rephrase your question.", 
+        branches: fallbackBranches
       };
     }
   };
 
   // Helper function to position nodes in a circular pattern around the parent node
   const calculatePosition = (parentId: string, index: number, total: number) => {
+    // Ensure total is at least 1 to avoid division by zero
+    const safeTotal = Math.max(total, 1);
     const radius = 250; // Distance from parent node
-    const angle = (index / total) * 2 * Math.PI;
+    const angle = (index / safeTotal) * 2 * Math.PI;
     
     // Get the parent node's position from the store
     const nodes = useExplorationStore.getState().nodes;

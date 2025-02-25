@@ -2,7 +2,7 @@
 
 import { useExplorationStore } from '@/store/explorationStore';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { motion, useMotionValue, useTransform, MotionValue } from 'framer-motion';
+import { motion, useMotionValue, useTransform, MotionValue, animate } from 'framer-motion';
 import { Node, Connection } from '@/types';
 
 // Import refactored hooks
@@ -11,9 +11,10 @@ import { useCanvasGestures, useNodeDragging, useZoomControls } from '@/hooks';
 // Import refactored components
 import ExploreNode from './canvas/ExploreNode';
 import BranchNode from './canvas/BranchNode';
-import NodeConnection from './canvas/NodeConnection';
+import ConnectionLine from './canvas/Connections';
 import ZoomControls from './canvas/ZoomControls';
 import { ZoomProvider } from '@/contexts';
+import { cn } from '@/lib/utils';
 
 /**
  * Canvas Component
@@ -57,34 +58,12 @@ export default function Canvas(): React.ReactElement {
   // Use custom hooks for functionality
   const { draggingNodeId, handleNodeMouseDown } = useNodeDragging({
     scale,
-    setActiveNode,
-    updateNodePosition
-  });
-  
-  const { handleZoomButton, resetView } = useZoomControls({
-    scale,
     x,
     y,
-    containerRef,
-    nodes,
+    setActiveNode,
+    updateNodePosition,
     activeNodeId
   });
-  
-  /**
-   * Handles canvas panning by updating motion values
-   * 
-   * @param dx - Delta X movement in pixels
-   * @param dy - Delta Y movement in pixels 
-   */
-  const handlePan = useCallback((dx: number, dy: number): void => {
-    // Apply direct value update for smoother panning
-    const newX = x.get() + dx;
-    const newY = y.get() + dy;
-    
-    // Update position values
-    x.set(newX);
-    y.set(newY);
-  }, [x, y]);
   
   /**
    * Handles canvas zooming with focus point preservation
@@ -104,31 +83,149 @@ export default function Canvas(): React.ReactElement {
     const currentX = x.get();
     const currentY = y.get();
     
-    // Calculate next scale with limits (0.1 to 5)
-    const nextScale = Math.min(5, Math.max(0.1, currentScale * zoomFactor));
+    // Calculate next scale with limits (0.5 to 1.0)
+    const nextScale = Math.min(1.0, Math.max(0.5, currentScale * zoomFactor));
     
     if (nextScale !== currentScale && clientX !== undefined && clientY !== undefined) {
+      // Get container dimensions and position
       const rect = containerRef.current.getBoundingClientRect();
-      const mouseX = clientX - rect.left;
-      const mouseY = clientY - rect.top;
       
-      // Calculate point position in world space
-      const pointX = (mouseX - currentX) / currentScale;
-      const pointY = (mouseY - currentY) / currentScale;
+      // Calculate cursor position relative to container
+      const relativeX = clientX - rect.left;
+      const relativeY = clientY - rect.top;
       
-      // Calculate new position to zoom toward mouse
-      const newX = mouseX - pointX * nextScale;
-      const newY = mouseY - pointY * nextScale;
+      // With transform-origin: '0 0', the formula is simpler:
+      // 1. Convert cursor position from screen space to world space
+      const worldX = (relativeX - currentX) / currentScale;
+      const worldY = (relativeY - currentY) / currentScale;
+      
+      // 2. Calculate new position to keep the world point under cursor
+      const newX = relativeX - worldX * nextScale;
+      const newY = relativeY - worldY * nextScale;
       
       // Update values
       scale.set(nextScale);
       x.set(newX);
       y.set(newY);
     } else {
-      // Simple zoom without position adjustment
+      // Zoom from center without client coordinates
+      const rect = containerRef.current.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      
+      // Calculate the world position of the center point
+      const worldX = (centerX - currentX) / currentScale;
+      const worldY = (centerY - currentY) / currentScale;
+      
+      // Calculate new position to keep center fixed
+      const newX = centerX - (worldX * nextScale);
+      const newY = centerY - (worldY * nextScale);
+      
+      // Update values
       scale.set(nextScale);
+      x.set(newX);
+      y.set(newY);
     }
   }, [containerRef, scale, x, y]);
+  
+  // Extract resetView from useZoomControls and memoize it properly
+  const { handleZoomButton } = useZoomControls({
+    scale,
+    x,
+    y,
+    containerRef,
+    nodes,
+    activeNodeId,
+    onZoom: handleZoom
+  });
+  
+  // Memoize resetView to avoid dependency issues
+  const resetView = useCallback(() => {
+    // Use provided targetNodeId or fall back to activeNodeId
+    const nodeId = activeNodeId;
+    const node = nodes[nodeId];
+    
+    if (node) {
+      // Get window dimensions
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // Center node at window center
+      x.set(windowWidth / 2 - node.position.x);
+      y.set(windowHeight / 2 - node.position.y);
+      
+      // Reset scale to 1
+      scale.set(1);
+    } else {
+      // If no node is found or active, just reset to center and default scale
+      x.set(0);
+      y.set(0);
+      scale.set(1);
+    }
+  }, [activeNodeId, nodes, x, y, scale]);
+  
+  /**
+   * Handles canvas panning by updating motion values
+   * 
+   * @param dx - Delta X movement in pixels
+   * @param dy - Delta Y movement in pixels 
+   */
+  const handlePan = useCallback((dx: number, dy: number): void => {
+    // Skip panning if a node is being dragged
+    if (draggingNodeId) return;
+    
+    // Apply direct value update for smoother panning
+    const newX = x.get() + dx;
+    const newY = y.get() + dy;
+    
+    // Update position values
+    x.set(newX);
+    y.set(newY);
+  }, [x, y, draggingNodeId]);
+  
+  /**
+   * Handles wheel-triggered zoom gestures using our custom zoom functionality
+   * 
+   * Instead of just preventing zoom, this now captures trackpad pinch gestures
+   * and routes them to our custom zoom handler for a better user experience.
+   * 
+   * @param e - Wheel event to process
+   * @returns false if a zoom gesture was detected and handled
+   */
+  const handleWheelZoom = useCallback((e: WheelEvent): boolean | undefined => {
+    // Skip zoom handling if we're dragging a node
+    if (draggingNodeId) {
+      return undefined;
+    }
+    
+    // Prevent default browser behavior first to avoid double-zooming
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Capture exact cursor position for precise zoom targeting
+    const { clientX, clientY } = e;
+    
+    // Determine zoom direction and calculate zoom factor
+    let zoomFactor = 1.0;
+    
+    // Mac trackpads send wheel events with ctrlKey for pinch gestures
+    if (e.ctrlKey || e.metaKey) {
+      // More precise zoom for trackpad pinch
+      const direction = e.deltaY < 0 ? 1 : -1; // -1 zoom out, 1 zoom in
+      const magnitude = Math.min(Math.abs(e.deltaY) / 30, 0.5); // Further increased sensitivity
+      zoomFactor = 1 + (direction * magnitude * 0.5); // Stronger zoom effect
+    } else {
+      // Standard mouse wheel zoom
+      const direction = e.deltaY < 0 ? 1 : -1; // -1 zoom out, 1 zoom in
+      zoomFactor = 1 + (direction * 0.1); // Fixed 10% zoom steps for mouse wheel
+    }
+    
+    // Always pass cursor position to zoom function
+    // This is critical for zoom-to-cursor functionality
+    handleZoom(zoomFactor, clientX, clientY);
+    
+    return false;
+  }, [handleZoom, draggingNodeId]);
   
   // Set up gesture handling
   const bindGestures = useCanvasGestures({
@@ -200,28 +297,8 @@ export default function Canvas(): React.ReactElement {
       return undefined;
     };
     
-    /**
-     * Prevents wheel-triggered zoom gestures
-     * 
-     * Detects and blocks pinch zoom gestures that come through as wheel events,
-     * particularly when combined with Ctrl/Cmd keys.
-     * 
-     * @param e - Wheel event to process
-     * @returns false if a zoom gesture was detected and prevented
-     */
-    const preventWheelZoom = (e: WheelEvent): boolean | undefined => {
-      // Check for pinch zoom gestures which often come through as wheel + ctrl
-      if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > 10) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-      
-      return undefined;
-    };
-    
     // Add event listeners with proper options to ensure they work
-    window.addEventListener('wheel', preventWheelZoom as EventListener, { passive: false, capture: true });
+    window.addEventListener('wheel', handleWheelZoom, { passive: false, capture: true });
     window.addEventListener('keydown', preventKeyboardZoom, { passive: false });
     window.addEventListener('gesturestart', preventDefaultForZoom, { passive: false });
     window.addEventListener('gesturechange', preventDefaultForZoom, { passive: false });
@@ -280,7 +357,7 @@ export default function Canvas(): React.ReactElement {
     
     return () => {
       // Clean up all event listeners
-      window.removeEventListener('wheel', preventWheelZoom as EventListener, { capture: true });
+      window.removeEventListener('wheel', handleWheelZoom, { capture: true });
       window.removeEventListener('keydown', preventKeyboardZoom);
       window.removeEventListener('gesturestart', preventDefaultForZoom);
       window.removeEventListener('gesturechange', preventDefaultForZoom);
@@ -289,7 +366,7 @@ export default function Canvas(): React.ReactElement {
       document.removeEventListener('touchend', preventTouchendZoom);
       document.removeEventListener('touchstart', handleTouchStart);
     };
-  }, []);
+  }, [activeNodeId, nodes, handleWheelZoom, resetView, draggingNodeId]);
   
   // Update display scale for UI only
   useEffect(() => {
@@ -302,6 +379,46 @@ export default function Canvas(): React.ReactElement {
     };
   }, [scale]);
   
+  // Add dedicated effect to handle activeNodeId changes with smooth animations
+  useEffect(() => {
+    // Skip initial render
+    if (!isClient) return;
+    
+    // Skip if a node is being dragged - this prevents the centering animation
+    // from interfering with drag operations
+    if (draggingNodeId) return;
+    
+    // Animate to center on the active node whenever it changes
+    if (activeNodeId && nodes[activeNodeId]) {
+      // Small delay to ensure UI updates first
+      const timeoutId = setTimeout(() => {
+        // Double-check that we're still not dragging before starting animation
+        // This prevents animation from starting if dragging begins during the timeout
+        if (draggingNodeId) return;
+        
+        const node = nodes[activeNodeId];
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        // Use smooth animation without bounce
+        animate(x, windowWidth / 2 - node.position.x, { 
+          type: 'tween', 
+          ease: 'easeOut',
+          duration: 0.2
+        });
+        animate(y, windowHeight / 2 - node.position.y, { 
+          type: 'tween', 
+          ease: 'easeOut',
+          duration: 0.2
+        });
+        // Keep current scale for consistency
+      }, 50);
+      
+      // Clean up timeout if component unmounts or dependencies change
+      return () => clearTimeout(timeoutId);
+    }
+  }, [activeNodeId, nodes, x, y, isClient, draggingNodeId]);
+  
   // Memoize the connections to prevent unnecessary re-renders
   const memoizedConnections = useMemo(() => {
     return connections.map((connection) => {
@@ -311,7 +428,7 @@ export default function Canvas(): React.ReactElement {
       if (!sourceNode || !targetNode) return null;
       
       return (
-        <NodeConnection 
+        <ConnectionLine 
           key={`${connection.source}-${connection.target}`}
           sourceNode={sourceNode}
           targetNode={targetNode}
@@ -338,13 +455,16 @@ export default function Canvas(): React.ReactElement {
       <div 
         key={node.id}
         data-node-id={node.id}
+        className={cn(
+          isActive && "node-active" // Add node-active class when node is selected
+        )}
         style={{ 
           position: 'absolute',
           left: node.position.x,
           top: node.position.y,
-          transform: `translate(-50%, -50%) scale(${displayScale})`,
+          transform: `translate(-50%, -50%)`,
           transformOrigin: 'center',
-          cursor: isDragging ? 'grabbing' : 'grab',
+          cursor: isDragging ? 'grabbing' : 'pointer', // Changed from 'grab' to 'pointer' for non-drag handle areas
           // All nodes have the same z-index unless being dragged
           zIndex: isDragging ? 10 : 1,
           // Only show shadow when dragging
@@ -352,16 +472,48 @@ export default function Canvas(): React.ReactElement {
           willChange: 'transform',
           transition: isDragging ? 'none' : 'filter 0.2s ease'
         }}
-        onMouseDown={(e: React.MouseEvent): void => handleNodeMouseDown(e, node)}
+        onMouseDown={(e: React.MouseEvent): void => {
+          // Check if the click is on a drag handle
+          const target = e.target as HTMLElement;
+          const isGrabHandle = 
+            target.hasAttribute('data-grab-handle') || 
+            !!target.closest('[data-grab-handle="true"]');
+          
+          if (isGrabHandle) {
+            // If it's on a drag handle, completely stop propagation to prevent canvas dragging
+            // and ensure no other canvas interactions occur during drag
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // Handle the node dragging behavior
+            handleNodeMouseDown(e, node);
+            return;
+          }
+          
+          // Otherwise, let the regular click handler in ExploreNode/BranchNode handle it
+        }}
         onTouchStart={(e: React.TouchEvent): void => {
-          // Convert touch event to mouse event for compatibility
+          // Check if the touch is on a drag handle
           const touch = e.touches[0];
-          const mouseEvent = {
-            clientX: touch.clientX,
-            clientY: touch.clientY,
-            stopPropagation: () => e.stopPropagation()
-          } as React.MouseEvent;
-          handleNodeMouseDown(mouseEvent, node);
+          const element = document.elementFromPoint(touch.clientX, touch.clientY);
+          const isGrabHandle = element?.closest('[data-grab-handle="true"]');
+          
+          if (isGrabHandle) {
+            // Stop propagation to prevent canvas dragging
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // Convert touch event to mouse event for compatibility
+            const mouseEvent = {
+              clientX: touch.clientX,
+              clientY: touch.clientY,
+              stopPropagation: () => e.stopPropagation(),
+              target: element,
+              preventDefault: () => e.preventDefault(),
+              // Cast as any to avoid TypeScript errors with the limited event object
+            } as any;
+            handleNodeMouseDown(mouseEvent, node);
+          }
         }}
       >
         {node.type === 'explore' ? (
@@ -386,9 +538,9 @@ export default function Canvas(): React.ReactElement {
     nodes, 
     activeNodeId, 
     draggingNodeId, 
-    displayScale, 
+    displayScale,
+    handleNodeMouseDown
     // Exclude scale since we already use displayScale which is derived from it
-    // Remove handleNodeMouseDown from dependencies as it doesn't change between renders
   ]);
   
   // Wrap everything in the ZoomProvider
@@ -428,7 +580,7 @@ export default function Canvas(): React.ReactElement {
                 x, 
                 y,
                 scale,
-                transformOrigin: 'center',
+                transformOrigin: '0 0',
                 willChange: 'transform'
               }}
             >

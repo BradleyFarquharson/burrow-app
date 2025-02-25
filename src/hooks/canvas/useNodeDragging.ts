@@ -10,10 +10,16 @@ import { Node } from '@/types';
 interface UseNodeDraggingProps {
   /** Motion value for scale/zoom level */
   scale: MotionValue<number>;
+  /** Motion value for X position */
+  x: MotionValue<number>;
+  /** Motion value for Y position */
+  y: MotionValue<number>;
   /** Function to set the active node */
   setActiveNode: (nodeId: string) => void;
   /** Function to update a node's position */
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
+  /** Currently active node ID */
+  activeNodeId: string;
 }
 
 /**
@@ -35,14 +41,18 @@ interface UseNodeDraggingReturn {
  * - Optimized frame-rate with requestAnimationFrame
  * - Reduced re-renders for better performance
  * - Direct DOM manipulation for smoother dragging
+ * - Proper handling of coordinate systems for selected nodes
  * 
  * @param props - Hook configuration props
  * @returns Object containing dragging state and event handlers
  */
 export function useNodeDragging({
   scale,
+  x,
+  y,
   setActiveNode,
-  updateNodePosition
+  updateNodePosition,
+  activeNodeId
 }: UseNodeDraggingProps): UseNodeDraggingReturn {
   // Track which node is being dragged
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
@@ -54,7 +64,12 @@ export function useNodeDragging({
     startPos: { x: number, y: number },
     startMouse: { x: number, y: number },
     hasMoved: boolean,
-    currentPos: { x: number, y: number }
+    currentPos: { x: number, y: number },
+    // Canvas state when dragging started - used for coordinate transformation
+    canvasStartPos: { x: number, y: number },
+    canvasStartScale: number,
+    // Store whether this node was active when drag started
+    wasActive: boolean
   } | null>(null);
   
   const isDraggingRef = useRef(false);
@@ -82,23 +97,35 @@ export function useNodeDragging({
     // Store last mouse position for velocity calculations if needed
     lastMousePosRef.current = { x: clientX, y: clientY };
     
-    // Calculate the new position based on mouse movement and scale
+    const { 
+      startPos, 
+      startMouse, 
+      canvasStartPos, 
+      canvasStartScale 
+    } = draggedNodeRef.current;
+    
+    // Get current canvas scale
     const currentScale = scale.get();
-    const { startPos, startMouse } = draggedNodeRef.current;
     
-    // Calculate distance moved, adjusted for zoom level
-    const dx = (clientX - startMouse.x) / currentScale;
-    const dy = (clientY - startMouse.y) / currentScale;
+    // Calculate distance moved in screen coordinates
+    const screenDx = clientX - startMouse.x;
+    const screenDy = clientY - startMouse.y;
     
-    // Calculate new absolute position
-    const newX = startPos.x + dx;
-    const newY = startPos.y + dy;
+    // Convert screen movement to canvas movement by dividing by scale
+    // This accounts for canvas zoom level during dragging
+    const canvasDx = screenDx / currentScale;
+    const canvasDy = screenDy / currentScale;
+    
+    // Calculate new absolute position in canvas coordinates
+    // This uses the original node position at drag start as the reference point
+    const newX = startPos.x + canvasDx;
+    const newY = startPos.y + canvasDy;
     
     // Update the current position in our ref
     draggedNodeRef.current.currentPos = { x: newX, y: newY };
     
     // Mark that this node has moved for click vs. drag detection
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    if (Math.abs(canvasDx) > 3 || Math.abs(canvasDy) > 3) {
       draggedNodeRef.current.hasMoved = true;
       
       // Apply direct DOM manipulation for immediate feedback
@@ -165,7 +192,7 @@ export function useNodeDragging({
       // Prevent default browser behavior
       e.preventDefault();
       
-      const { nodeId, hasMoved } = draggedNodeRef.current;
+      const { nodeId, hasMoved, wasActive } = draggedNodeRef.current;
       
       // Do one final position update to ensure store is in sync with DOM
       if (hasMoved && draggedNodeRef.current.currentPos) {
@@ -174,6 +201,12 @@ export function useNodeDragging({
       
       // Reset dragging node ID (this will trigger a re-render)
       setDraggingNodeId(null);
+      
+      // Restore active node state if this node was active before dragging
+      if (wasActive) {
+        // Use setTimeout to ensure dragging state is fully cleared first
+        setTimeout(() => setActiveNode(nodeId), 0);
+      }
       
       // Clean up the drag operation
       cleanupDrag();
@@ -188,7 +221,7 @@ export function useNodeDragging({
       // Prevent default browser behavior
       e.preventDefault();
       
-      const { nodeId, hasMoved } = draggedNodeRef.current;
+      const { nodeId, hasMoved, wasActive } = draggedNodeRef.current;
       
       // Do one final position update to ensure store is in sync with DOM
       if (hasMoved && draggedNodeRef.current.currentPos) {
@@ -197,6 +230,12 @@ export function useNodeDragging({
       
       // Reset dragging node ID (this will trigger a re-render)
       setDraggingNodeId(null);
+      
+      // Restore active node state if this node was active before dragging
+      if (wasActive) {
+        // Use setTimeout to ensure dragging state is fully cleared first
+        setTimeout(() => setActiveNode(nodeId), 0);
+      }
       
       // Clean up the drag operation
       cleanupDrag();
@@ -223,20 +262,36 @@ export function useNodeDragging({
     e.preventDefault();
     
     // Get the element that will be dragged (the node container)
-    const nodeElement = (e.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
+    const nodeElement = document.querySelector(`[data-node-id="${node.id}"]`) as HTMLElement;
     
     if (nodeElement) {
       // Mark this node as being dragged
       setDraggingNodeId(node.id);
       
-      // Set up the drag operation
+      // Check if this node is currently active
+      const isActive = node.id === activeNodeId;
+      
+      // If the node is active, temporarily unset active node to prevent centering
+      if (isActive) {
+        setActiveNode('');
+      }
+      
+      // Get current canvas state - important for coordinate transformation
+      const currentCanvasX = x.get();
+      const currentCanvasY = y.get();
+      const currentScale = scale.get();
+      
+      // Set up the drag operation with canvas state
       draggedNodeRef.current = {
         nodeId: node.id,
         element: nodeElement,
         startPos: { ...node.position },
         startMouse: { x: e.clientX, y: e.clientY },
         hasMoved: false,
-        currentPos: { ...node.position }
+        currentPos: { ...node.position },
+        canvasStartPos: { x: currentCanvasX, y: currentCanvasY },
+        canvasStartScale: currentScale,
+        wasActive: isActive
       };
       
       isDraggingRef.current = true;
@@ -252,7 +307,7 @@ export function useNodeDragging({
       document.addEventListener('touchmove', handleTouchMove, { passive: false });
       document.addEventListener('touchend', handleTouchEnd);
     }
-  }, [updateNodeOnFrame, handleMouseMove, handleTouchMove, setDraggingNodeId]);
+  }, [updateNodeOnFrame, handleMouseMove, handleTouchMove, setDraggingNodeId, x, y, scale, activeNodeId, setActiveNode]);
   
   // Clean up event listeners if component unmounts during drag
   useEffect(() => {

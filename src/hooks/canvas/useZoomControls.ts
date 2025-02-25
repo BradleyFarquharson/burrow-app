@@ -6,21 +6,23 @@ import { MutableRefObject } from 'react';
 import { Node } from '@/types';
 
 /**
- * Props for the useZoomControls hook
+ * Props for useZoomControls hook
  */
 interface UseZoomControlsProps {
-  /** Motion value for scale/zoom level */
+  /** MotionValue for scale */
   scale: MotionValue<number>;
-  /** Motion value for X position */
+  /** MotionValue for x position */
   x: MotionValue<number>;
-  /** Motion value for Y position */
+  /** MotionValue for y position */
   y: MotionValue<number>;
   /** Reference to the container element */
-  containerRef: MutableRefObject<HTMLDivElement | null>;
-  /** Map of all nodes in the canvas */
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  /** All nodes in the graph */
   nodes: Record<string, Node>;
-  /** ID of the currently active node */
-  activeNodeId: string;
+  /** Currently active node id */
+  activeNodeId?: string;
+  /** Optional function to handle zoom with coordinates */
+  onZoom?: (zoomFactor: number, clientX: number, clientY: number) => void;
 }
 
 /**
@@ -34,13 +36,15 @@ interface UseZoomControlsReturn {
 }
 
 /**
- * Hook for managing zoom controls and view positioning
+ * Hook for zoom control functionality
  * 
- * Provides functions to handle zoom button clicks and resetting the view
- * to center on specific nodes with smooth animations.
+ * Provides methods for controlling canvas zoom:
+ * - Reset view to center on a specific node
+ * - Zoom in/out buttons for precise control
+ * - Automatic centering on active node
  * 
  * @param props - Hook configuration props
- * @returns Object containing zoom control functions
+ * @returns Methods for controlling zoom and position
  */
 export function useZoomControls({
   scale,
@@ -48,63 +52,72 @@ export function useZoomControls({
   y,
   containerRef,
   nodes,
-  activeNodeId
+  activeNodeId,
+  onZoom
 }: UseZoomControlsProps): UseZoomControlsReturn {
   /**
-   * Resets the view to center on a specific node or the active node
+   * Resets the view to center on a node with smooth animation
    * 
-   * @param targetNodeId - Optional ID of node to center on, defaults to active node
+   * @param targetNodeId - Optional node ID to center on (defaults to activeNodeId)
    */
-  const resetView = useCallback((targetNodeId?: string): void => {
+  const resetView = useCallback(() => {
     // Use provided targetNodeId or fall back to activeNodeId
-    const nodeId = targetNodeId || activeNodeId;
-    const node = nodes[nodeId];
+    const nodeId = activeNodeId || '';
+    const node = nodeId ? nodes[nodeId] : null;
     
     if (node) {
-      // Use framer-motion's animate for smooth transitions
-      animate(x, window.innerWidth / 2 - node.position.x, { duration: 0.5 });
-      animate(y, window.innerHeight / 2 - node.position.y, { duration: 0.5 });
-      animate(scale, 1, { duration: 0.5 });
+      // Get window dimensions
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // Center node position
+      const newX = windowWidth / 2 - node.position.x;
+      const newY = windowHeight / 2 - node.position.y;
+      
+      // Animate to new position and reset scale
+      animate(x, newX, { type: 'spring', stiffness: 400, damping: 30 });
+      animate(y, newY, { type: 'spring', stiffness: 400, damping: 30 });
+      animate(scale, 1, { type: 'spring', stiffness: 400, damping: 30 });
     } else {
-      // If no node is found or active, just reset to center and default scale
-      animate(x, 0, { duration: 0.5 });
-      animate(y, 0, { duration: 0.5 });
-      animate(scale, 1, { duration: 0.5 });
+      // Reset to defaults if no node specified
+      animate(x, 0, { type: 'spring', stiffness: 400, damping: 30 });
+      animate(y, 0, { type: 'spring', stiffness: 400, damping: 30 });
+      animate(scale, 1, { type: 'spring', stiffness: 400, damping: 30 });
     }
   }, [nodes, activeNodeId, x, y, scale]);
   
-  // Button zoom handlers (more precise control)
-  const handleZoomButton = useCallback((zoomIn: boolean) => {
-    if (containerRef.current) {
+  /**
+   * Handles zoom button clicks for manual zoom in/out
+   * 
+   * @param zoomIn - True to zoom in, false to zoom out
+   */
+  const handleZoomButton = useCallback(
+    (zoomIn: boolean) => {
+      if (!containerRef.current) return;
+      
+      // Get container dimensions
       const rect = containerRef.current.getBoundingClientRect();
       const centerX = rect.width / 2;
       const centerY = rect.height / 2;
       
+      // Get current scale
       const currentScale = scale.get();
-      const currentX = x.get();
-      const currentY = y.get();
       
-      // Fixed increments for button zooming
-      const nextScale = zoomIn 
-        ? Math.min(3, currentScale * 1.2) 
-        : Math.max(0.2, currentScale / 1.2);
+      // Calculate new scale with fixed step (10%)
+      // Respect the limits of 0.5 (min) and 1.0 (max)
+      const zoomStep = 0.1; // 10% zoom step
+      const newScale = zoomIn 
+        ? Math.min(1.0, currentScale + zoomStep) 
+        : Math.max(0.5, currentScale - zoomStep);
       
-      if (nextScale !== currentScale) {
-        // Calculate point position in world space
-        const pointX = (centerX - currentX) / currentScale;
-        const pointY = (centerY - currentY) / currentScale;
-        
-        // Calculate new position to zoom toward center
-        const newX = centerX - pointX * nextScale;
-        const newY = centerY - pointY * nextScale;
-        
-        // Animate to new values for smoother transition
-        animate(scale, nextScale, { duration: 0.2 });
-        animate(x, newX, { duration: 0.2 });
-        animate(y, newY, { duration: 0.2 });
-      }
-    }
-  }, [scale, x, y, containerRef]);
+      // Calculate zoom factor
+      const zoomFactor = newScale / currentScale;
+      
+      // Apply zoom centered on the canvas
+      onZoom?.(zoomFactor, centerX, centerY);
+    },
+    [containerRef, scale, onZoom]
+  );
   
   return {
     handleZoomButton,

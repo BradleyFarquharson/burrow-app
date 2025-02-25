@@ -146,13 +146,16 @@ export function useCanvasGestures({
       return memo;
     },
     
-    // Handle wheel events for zooming and panning
-    onWheel: ({ event }) => {
-      onWheel(event as WheelEvent);
-    },
+    // Disable wheel event handling - we handle this directly in Canvas.tsx
+    // onWheel: ({ event }) => {
+    //   onWheel(event as WheelEvent);
+    // },
     
     // Handle pinch zoom for touch devices
     onPinch: ({ offset: [s], origin: [ox, oy], event }) => {
+      // Skip if we're dragging a node
+      if (draggingNodeId) return;
+      
       // Check if this is a touch event with touches property
       const touch = 'touches' in event ? event.touches : null;
       const clientX = touch ? touch[0].clientX : ox;
@@ -168,7 +171,7 @@ export function useCanvasGestures({
       threshold: 0,
     },
     wheel: {
-      eventOptions: { capture: true, passive: false }
+      enabled: false // Completely disable wheel handling here
     },
     pinch: {
       eventOptions: { capture: true }
@@ -178,6 +181,11 @@ export function useCanvasGestures({
   // Handle wheel events separately
   const onWheel = useCallback(
     (event: WheelEvent) => {
+      // DISABLED: We now handle wheel events directly in Canvas.tsx
+      // Skip processing here to avoid double-handling
+      return;
+      
+      /* Original code commented out
       // Skip if we're dragging a node
       if (draggingNodeId) return;
       
@@ -204,6 +212,7 @@ export function useCanvasGestures({
         // For regular scroll events, use them for panning
         onPan(-event.deltaX, -event.deltaY);
       }
+      */
     },
     [onPan, onZoom, draggingNodeId]
   );

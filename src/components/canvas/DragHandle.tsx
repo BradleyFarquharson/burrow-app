@@ -2,6 +2,7 @@
 
 import { GripHorizontal } from 'lucide-react';
 import React from 'react';
+import { cn } from '@/lib/utils';
 
 /**
  * Props for the DragHandle component
@@ -23,15 +24,23 @@ interface DragHandleProps {
 export default function DragHandle({ nodeId }: DragHandleProps): React.ReactElement {
   return (
     <div 
-      className="absolute w-20 h-6 top-0 left-1/2 -translate-x-1/2 -translate-y-10 flex items-center justify-center cursor-grab bg-zinc-700 rounded-md z-10 shadow-md"
+      className={cn(
+        "absolute w-20 h-6 top-0 left-1/2 -translate-x-1/2 -translate-y-10",
+        "flex items-center justify-center cursor-grab",
+        "bg-card border border-border rounded-md shadow-md"
+      )}
       data-grab-handle="true"
       data-node-id={nodeId}
       title="Drag to move"
+      style={{ 
+        pointerEvents: 'auto',
+        zIndex: 20 // Higher z-index to ensure it's always on top
+      }}
     >
       {/* Make the icon fill the entire width of the handle for better grabbing */}
       <div className="w-full h-full flex items-center justify-center" data-grab-handle="true">
         <GripHorizontal 
-          className="h-4 w-4 text-zinc-200 pointer-events-none" 
+          className="h-4 w-4 text-muted-foreground pointer-events-none" 
           data-grab-handle="true"
         />
       </div>

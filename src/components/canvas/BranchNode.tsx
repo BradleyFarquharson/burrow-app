@@ -9,6 +9,7 @@ import { Node } from '@/types';
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DragHandle from './DragHandle';
+import { ConnectionAnchor } from './Connections';
 import { useZoom } from '@/contexts';
 
 /**
@@ -31,7 +32,7 @@ interface BranchNodeProps {
  * @returns React component that renders a branch node
  */
 export default function BranchNode({ node, isActive }: BranchNodeProps): React.ReactElement {
-  const { addBranchNodes, updateNodeQuestion, updateNodeContent } = useExplorationStore();
+  const { addBranchNodes, updateNodeQuestion, updateNodeContent, setActiveNode } = useExplorationStore();
   const { generateIdeas, isLoading } = useGemini();
   const [expanded, setExpanded] = useState<boolean>(false);
   
@@ -44,7 +45,8 @@ export default function BranchNode({ node, isActive }: BranchNodeProps): React.R
   const handleNodeClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent event from bubbling up to draggable handler
     
-    // Zoom to this node without setting it as active
+    // Set this as the active node and zoom to it
+    setActiveNode(node.id);
     resetView(node.id);
     
     // No longer toggling expanded state on general node click
@@ -73,93 +75,100 @@ export default function BranchNode({ node, isActive }: BranchNodeProps): React.R
   };
   
   return (
-    <Card 
-      className={cn(
-        "w-60 cursor-pointer transition-all shadow-md hover:shadow-lg relative",
-        // Highlight active node with a ring
-        isActive && "ring-2 ring-border",
-        expanded && "shadow-lg"
-      )}
-      onClick={(e) => {
-        // Allow drag handle events to be processed by the drag handler
-        const isGrabHandle = (e.target as HTMLElement).closest('[data-grab-handle="true"]');
-        if (isGrabHandle) {
-          // Don't do anything if clicking on drag handle
-          return;
-        }
-        
-        // For other clicks, handle the node click (zoom)
-        handleNodeClick(e);
-      }}
-      data-node-id={node.id}
-    >
-      {/* Use the reusable DragHandle component */}
+    <>
+      {/* Place the DragHandle outside the Card to prevent it from being hidden */}
       <DragHandle nodeId={node.id} />
       
-      <CardContent className="p-0 mt-6">
-        {/* Node header with title and expand/collapse button */}
-        <div className="p-3 border-b border-border flex items-center justify-between">
-          <h3 className="font-medium text-sm line-clamp-1">{node.content}</h3>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6 ml-1 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded(!expanded);
-            }}
-          >
-            {expanded ? 
-              <ChevronUp className="h-4 w-4" /> : 
-              <ChevronDown className="h-4 w-4" />
-            }
-          </Button>
-        </div>
-        
-        {/* Expandable content area */}
-        <div className={cn(
-          "overflow-hidden transition-all duration-300",
-          expanded ? "max-h-60" : "max-h-0"
-        )}>
-          <div className="p-3 space-y-3">
-            {/* Display question and answer if they exist */}
-            {node.question && node.content && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground font-medium">
-                  {node.question}
-                </p>
-                <p className="text-xs">{node.content}</p>
-              </div>
-            )}
-            
-            {/* Node description if available */}
-            {node.description && !node.question && (
-              <p className="text-xs text-muted-foreground">{node.description}</p>
-            )}
-            
-            {/* Explore deeper button to generate sub-branches */}
+      {/* Place the ConnectionAnchor outside the Card */}
+      <ConnectionAnchor nodeId={node.id} position="left" />
+    
+      <Card 
+        className={cn(
+          "w-60 cursor-pointer transition-all shadow-md hover:shadow-lg relative",
+          "card-container",
+          // Highlight active node with a ring
+          isActive && "ring-2 ring-border",
+          expanded && "shadow-lg"
+        )}
+        onClick={(e) => {
+          // Allow drag handle events to be processed by the drag handler
+          const isGrabHandle = (e.target as HTMLElement).closest('[data-grab-handle="true"]');
+          if (isGrabHandle) {
+            // Don't do anything if clicking on drag handle
+            e.stopPropagation();
+            return;
+          }
+          
+          // For other clicks, handle the node click (zoom)
+          handleNodeClick(e);
+        }}
+        data-node-id={node.id}
+      >
+        <CardContent className="p-0 mt-6">
+          {/* Node header with title and expand/collapse button */}
+          <div className="p-3 border-b border-border flex items-center justify-between">
+            <h3 className="font-medium text-sm line-clamp-1">{node.content}</h3>
             <Button 
-              size="sm"
-              variant="outline"
-              className="w-full text-xs gap-1 border-border hover:bg-muted" 
-              onClick={handleExplore}
-              disabled={isLoading}
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6 ml-1 flex-shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(!expanded);
+              }}
             >
-              {isLoading ? (
-                <span className="flex items-center gap-1">
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Exploring...
-                </span>
-              ) : (
-                <span className="flex items-center gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  Explore Deeper
-                </span>
-              )}
+              {expanded ? 
+                <ChevronUp className="h-4 w-4" /> : 
+                <ChevronDown className="h-4 w-4" />
+              }
             </Button>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+          
+          {/* Expandable content area */}
+          <div className={cn(
+            "overflow-hidden transition-all duration-300",
+            expanded ? "max-h-60" : "max-h-0"
+          )}>
+            <div className="p-3 space-y-3">
+              {/* Display question and answer if they exist */}
+              {node.question && node.content && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {node.question}
+                  </p>
+                  <p className="text-xs">{node.content}</p>
+                </div>
+              )}
+              
+              {/* Node description if available */}
+              {node.description && !node.question && (
+                <p className="text-xs text-muted-foreground">{node.description}</p>
+              )}
+              
+              {/* Explore deeper button to generate sub-branches */}
+              <Button 
+                size="sm"
+                variant="outline"
+                className="w-full text-xs gap-1 border-border hover:bg-muted" 
+                onClick={handleExplore}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-1">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Exploring...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    Explore Deeper
+                  </span>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 } 
