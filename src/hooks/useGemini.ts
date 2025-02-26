@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Node, Branch, GeminiResponse } from '@/types';
+import { Node, Branch, GeminiResponse, Connection } from '@/types';
 import { useExplorationStore } from '@/store/explorationStore';
 
 export function useGemini() {
@@ -87,29 +87,11 @@ export function useGemini() {
     }
   };
 
-  // Helper function to position nodes in a circular pattern around the parent node
   const calculatePosition = (parentId: string, index: number, total: number) => {
-    // Ensure total is at least 1 to avoid division by zero
-    const safeTotal = Math.max(total, 1);
-    const radius = 250; // Distance from parent node
-    const angle = (index / safeTotal) * 2 * Math.PI;
-    
-    // Get the parent node's position from the store
-    const nodes = useExplorationStore.getState().nodes;
-    const parentNode = nodes[parentId];
-    
-    // If we can't find the parent node, use a fallback position
-    if (!parentNode) {
-      return {
-        x: radius * Math.cos(angle),
-        y: radius * Math.sin(angle),
-      };
-    }
-    
-    // Position relative to the parent node
+    // Return a default position that allows subnodes to be placed anywhere
     return {
-      x: parentNode.position.x + radius * Math.cos(angle),
-      y: parentNode.position.y + radius * Math.sin(angle),
+      x: Math.random() * 1000, // Random x position for testing
+      y: Math.random() * 1000, // Random y position for testing
     };
   };
 

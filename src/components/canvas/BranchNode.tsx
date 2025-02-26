@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useExplorationStore } from '@/store/explorationStore';
@@ -9,7 +9,7 @@ import { Node } from '@/types';
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DragHandle from './DragHandle';
-import { ConnectionAnchor } from './Connections';
+import AnchorDot from './AnchorDot';
 import { useZoom } from '@/contexts';
 
 /**
@@ -32,9 +32,19 @@ interface BranchNodeProps {
  * @returns React component that renders a branch node
  */
 export default function BranchNode({ node, isActive }: BranchNodeProps): React.ReactElement {
-  const { addBranchNodes, updateNodeQuestion, updateNodeContent, setActiveNode } = useExplorationStore();
+  const { 
+    addBranchNodes, 
+    updateNodeQuestion, 
+    updateNodeContent, 
+    setActiveNode,
+    repositionOverlappingNodes,
+    hasChildNodes
+  } = useExplorationStore();
   const { generateIdeas, isLoading } = useGemini();
   const [expanded, setExpanded] = useState<boolean>(false);
+  
+  // Check if this node has children
+  const hasChildren = useMemo(() => hasChildNodes(node.id), [node.id, hasChildNodes]);
   
   // Get resetView function from our zoom context
   const { resetView } = useZoom();
@@ -43,13 +53,21 @@ export default function BranchNode({ node, isActive }: BranchNodeProps): React.R
    * Handle click on the node - only zoom without expanding
    */
   const handleNodeClick = (e: React.MouseEvent) => {
+    // Check if click was on drag handle or anchor dot
+    const isGrabHandle = (e.target as HTMLElement).closest('[data-grab-handle="true"]');
+    const isAnchorDot = (e.target as HTMLElement).closest('[data-anchor-dot="true"]');
+    
+    if (isGrabHandle || isAnchorDot) {
+      // Don't activate the node if clicking on drag handle or anchor dot
+      e.stopPropagation();
+      return;
+    }
+    
     e.stopPropagation(); // Prevent event from bubbling up to draggable handler
     
     // Set this as the active node and zoom to it
     setActiveNode(node.id);
     resetView(node.id);
-    
-    // No longer toggling expanded state on general node click
   };
   
   /**
@@ -76,35 +94,33 @@ export default function BranchNode({ node, isActive }: BranchNodeProps): React.R
   
   return (
     <>
-      {/* Place the DragHandle outside the Card to prevent it from being hidden */}
       <DragHandle nodeId={node.id} />
       
-      {/* Place the ConnectionAnchor outside the Card */}
-      <ConnectionAnchor nodeId={node.id} position="left" />
-    
       <Card 
         className={cn(
-          "w-60 cursor-pointer transition-all shadow-md hover:shadow-lg relative",
-          "card-container",
-          // Highlight active node with a ring
-          isActive && "ring-2 ring-border",
-          expanded && "shadow-lg"
+          "shadow-md relative transition-all duration-300 ease-in-out",
+          "card-container", // Add card-container class for glow effect
+          "w-60", // Fixed width for branch nodes
+          isActive && "ring-2 ring-primary",
+          "overflow-visible" // Ensure overflow is visible
         )}
-        onClick={(e) => {
-          // Allow drag handle events to be processed by the drag handler
-          const isGrabHandle = (e.target as HTMLElement).closest('[data-grab-handle="true"]');
-          if (isGrabHandle) {
-            // Don't do anything if clicking on drag handle
-            e.stopPropagation();
-            return;
-          }
-          
-          // For other clicks, handle the node click (zoom)
-          handleNodeClick(e);
-        }}
+        onClick={handleNodeClick}
         data-node-id={node.id}
+        style={{ position: 'relative', zIndex: 1 }} // Ensure proper stacking context
       >
-        <CardContent className="p-0 mt-6">
+        {/* Always show left anchor dot (connection to parent) */}
+        <AnchorDot 
+          nodeId={node.id} 
+          position="left" 
+        />
+        
+        {/* Always show right anchor dot (connection to children) */}
+        <AnchorDot 
+          nodeId={node.id} 
+          position="right" 
+        />
+        
+        <CardContent className="p-0">
           {/* Node header with title and expand/collapse button */}
           <div className="p-3 border-b border-border flex items-center justify-between">
             <h3 className="font-medium text-sm line-clamp-1">{node.content}</h3>
@@ -115,6 +131,8 @@ export default function BranchNode({ node, isActive }: BranchNodeProps): React.R
               onClick={(e) => {
                 e.stopPropagation();
                 setExpanded(!expanded);
+                // Add repositioning call when expanding/collapsing nodes
+                repositionOverlappingNodes(node.id, !expanded);
               }}
             >
               {expanded ? 

@@ -23,6 +23,10 @@ const nextConfig = {
     buildActivity: false,
     buildActivityPosition: 'bottom-right',
   },
+  // Force a unique build ID to prevent caching issues
+  generateBuildId: async () => {
+    return `build-${new Date().getTime()}`;
+  }
 };
 
 module.exports = nextConfig; 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Node } from '@/types';
 import { Send, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DragHandle from './DragHandle';
-import { ConnectionAnchor } from './Connections';
+import AnchorDot from './AnchorDot';
 import { useZoom } from '@/contexts';
 
 /**
@@ -38,7 +38,19 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
   const [showThinking, setShowThinking] = useState<boolean>(false);
   const thinkingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
-  const { addBranchNodes, updateNodeContent, updateNodeQuestion, setActiveNode } = useExplorationStore();
+  // Check if this node has children using the store's hasChildNodes function
+  const { 
+    addBranchNodes, 
+    updateNodeContent, 
+    updateNodeQuestion, 
+    setActiveNode,
+    repositionOverlappingNodes,
+    hasChildNodes
+  } = useExplorationStore();
+  
+  // Check if the explore node has children
+  const hasChildren = useMemo(() => hasChildNodes(node.id), [node.id, hasChildNodes]);
+  
   const { generateIdeas, isLoading } = useGemini();
   
   // Get the resetView function from our context
@@ -52,6 +64,11 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
       }
     };
   }, []);
+  
+  // Effect to call repositionOverlappingNodes when isExpanded changes
+  useEffect(() => {
+    repositionOverlappingNodes(node.id, isExpanded);
+  }, [isExpanded, node.id, repositionOverlappingNodes]);
   
   /**
    * Handles the exploration action when a question is submitted
@@ -101,24 +118,24 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
   // Render the explore node
   return (
     <>
-      {/* Place the DragHandle outside the Card to prevent it from being hidden */}
+      {/* Place the DragHandle outside the Card */}
       <DragHandle nodeId={node.id} />
-      
-      {/* Place the ConnectionAnchor outside the Card */}
-      <ConnectionAnchor nodeId={node.id} position="right" />
       
       <Card 
         className={cn(
           "shadow-lg relative transition-all duration-300 ease-in-out",
           "card-container", // Add card-container class for glow effect
           isExpanded ? "w-96" : "w-80",
-          isActive && "ring-2 ring-primary"
+          isActive && "ring-2 ring-primary",
+          "overflow-visible" // Ensure overflow is visible
         )}
         onClick={(e) => {
-          // Check if click was on drag handle
+          // Check if click was on drag handle or anchor dot
           const isGrabHandle = (e.target as HTMLElement).closest('[data-grab-handle="true"]');
-          if (isGrabHandle) {
-            // Don't activate the node if clicking on drag handle
+          const isAnchorDot = (e.target as HTMLElement).closest('[data-anchor-dot="true"]');
+          
+          if (isGrabHandle || isAnchorDot) {
+            // Don't activate the node if clicking on drag handle or anchor dot
             e.stopPropagation();
             return;
           }
@@ -130,55 +147,66 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
           setActiveNode(node.id);
         }}
         data-node-id={node.id}
+        style={{ position: 'relative', zIndex: 1 }} // Ensure proper stacking context
       >
-        <CardContent className={cn(
-          "p-4",
-          isExpanded ? "pt-8" : "pt-4 pb-4"
-        )}>
-          {/* Display question and answer if they exist */}
-          {isExpanded ? (
-            <div className="space-y-4 transition-all duration-300 ease-in-out">
-              {/* Question section - bold at the top */}
-              <div className="space-y-3">
-                <p className="text-sm font-bold px-1">{node.question}</p>
-                
-                {/* Small centered divider */}
-                <div className="flex justify-center">
-                  <div className="w-16 h-px bg-border"></div>
-                </div>
-              </div>
-              
-              {/* Thinking indicator or answer */}
-              {showThinking || isLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2 px-1">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  <span>Thinking...</span>
-                </div>
-              ) : (
-                <p className="text-sm px-1 leading-relaxed">{node.content}</p>
-              )}
-            </div>
-          ) : (
-            // Initial state - just the input pill
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Ask a question to start exploring..."
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="rounded-full"
-              />
-              <Button 
-                size="icon"
-                variant="ghost"
-                onClick={handleExplore} 
-                disabled={isLoading || !question.trim()}
-                className="rounded-full h-9 w-9 flex-shrink-0"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+        {/* Always show right anchor dot for the explore node */}
+        <AnchorDot 
+          nodeId={node.id} 
+          position="right" 
+        />
+        
+        <CardContent className="p-4 space-y-4">
+          {/* Node title */}
+          {node.content && (
+            <div className="text-sm font-medium break-words">
+              {node.content}
             </div>
           )}
+          
+          {/* Show question and answer */}
+          {node.question && (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground font-medium">
+                {node.question}
+              </div>
+              <div className="text-xs">{node.content}</div>
+            </div>
+          )}
+          
+          {/* Thinking/loading state */}
+          {showThinking && (
+            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <div>Thinking...</div>
+            </div>
+          )}
+          
+          {/* Question input */}
+          <div className="relative mt-2">
+            <Input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Ask a question..."
+              className="pr-10 text-sm"
+              onKeyDown={handleKeyDown}
+              disabled={isLoading}
+            />
+            <div className="absolute inset-y-0 right-0 flex items-center">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={() => handleExplore()}
+                disabled={!question.trim() || isLoading}
+              >
+                {isLoading ? (
+                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <Send className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </>

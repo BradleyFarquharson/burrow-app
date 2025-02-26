@@ -3,7 +3,7 @@
 import { useExplorationStore } from '@/store/explorationStore';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, useMotionValue, useTransform, MotionValue, animate } from 'framer-motion';
-import { Node, Connection } from '@/types';
+import { Node } from '@/types';
 
 // Import refactored hooks
 import { useCanvasGestures, useNodeDragging, useZoomControls } from '@/hooks';
@@ -11,8 +11,8 @@ import { useCanvasGestures, useNodeDragging, useZoomControls } from '@/hooks';
 // Import refactored components
 import ExploreNode from './canvas/ExploreNode';
 import BranchNode from './canvas/BranchNode';
-import ConnectionLine from './canvas/Connections';
 import ZoomControls from './canvas/ZoomControls';
+import NodeConnections from './canvas/NodeConnections';
 import { ZoomProvider } from '@/contexts';
 import { cn } from '@/lib/utils';
 
@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
  * @returns React component that renders the interactive canvas
  */
 export default function Canvas(): React.ReactElement {
-  const { nodes, connections, activeNodeId, updateNodePosition, setActiveNode } = useExplorationStore();
+  const { nodes, activeNodeId, updateNodePosition, setActiveNode } = useExplorationStore();
   
   // Use motion values for better performance with hardware acceleration
   const scale = useMotionValue<number>(1);
@@ -419,25 +419,6 @@ export default function Canvas(): React.ReactElement {
     }
   }, [activeNodeId, nodes, x, y, isClient, draggingNodeId]);
   
-  // Memoize the connections to prevent unnecessary re-renders
-  const memoizedConnections = useMemo(() => {
-    return connections.map((connection) => {
-      const sourceNode = nodes[connection.source];
-      const targetNode = nodes[connection.target];
-      
-      if (!sourceNode || !targetNode) return null;
-      
-      return (
-        <ConnectionLine 
-          key={`${connection.source}-${connection.target}`}
-          sourceNode={sourceNode}
-          targetNode={targetNode}
-          scale={displayScale}
-        />
-      );
-    });
-  }, [connections, nodes, displayScale]);
-  
   /**
    * Renders an individual node with its proper positioning and styling
    * 
@@ -533,7 +514,11 @@ export default function Canvas(): React.ReactElement {
   
   // Memoize the nodes to prevent unnecessary re-renders
   const memoizedNodes = useMemo<React.ReactElement[]>(() => {
-    return Object.values(nodes).map(renderNode);
+    return Object.values(nodes).map((node) => (
+      <div key={node.id}>
+        {renderNode(node)}
+      </div>
+    ));
   }, [
     nodes, 
     activeNodeId, 
@@ -584,8 +569,8 @@ export default function Canvas(): React.ReactElement {
                 willChange: 'transform'
               }}
             >
-              {/* Draw connections first (behind nodes) */}
-              {memoizedConnections}
+              {/* Draw connection lines between nodes */}
+              <NodeConnections />
               
               {/* Draw nodes */}
               {memoizedNodes}

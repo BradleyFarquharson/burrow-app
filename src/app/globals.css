@@ -205,11 +205,16 @@
     transition: box-shadow 0.3s ease, border-color 0.3s ease;
     /* Match card border radius but only apply to the card itself */
     border-radius: calc(var(--radius) - 2px);
+    /* Remove any overflow hidden that might be cutting off anchor dots */
+    overflow: visible !important;
   }
   
-  /* Apply rounded borders to just the card container */
+  /* Apply rounded borders to just the card container - REMOVE overflow hidden */
   [data-node-id].node-active .card-container {
-    overflow: hidden; /* Safe to use overflow hidden just on the card */
+    /* Remove overflow hidden as it cuts off anchor dots */
+    /* overflow: hidden; */ /* Safe to use overflow hidden just on the card */
+    position: relative; /* Ensure proper stacking context */
+    z-index: 1; /* Lower than anchor dots */
   }
   
   /* Dark mode adjustments for the glow */
@@ -221,5 +226,32 @@
     border-color: hsla(var(--primary)/0.35);
     /* Match card border radius */
     border-radius: calc(var(--radius) - 2px);
+    /* Remove any overflow hidden that might be cutting off anchor dots */
+    overflow: visible !important;
   }
+  
+  /* Ensure anchor dots are always visible and not affected by node selection */
+  [data-anchor-dot="true"] {
+    /* Higher z-index to ensure it's above the glow effect */
+    z-index: 50 !important;
+    /* Prevent anchor dots from being affected by overflow hidden */
+    pointer-events: auto !important;
+    /* Ensure anchor dots are visible outside of the node */
+    overflow: visible !important;
+    /* Make sure they're not affected by parent overflow */
+    position: absolute !important;
+    /* Ensure cursor never changes to pointer */
+    cursor: default !important;
+    pointer-events: none !important;
+  }
+  
+  /* Ensure all children of anchor dots also have the default cursor */
+  [data-anchor-dot="true"] * {
+    cursor: default !important;
+    pointer-events: none !important;
+  }
+}
+
+svg, path, circle {
+  shape-rendering: optimizeQuality;
 }

@@ -77,6 +77,8 @@ export default function SidePanel() {
   // Handle creating a new exploration - no confirmation dialog
   const handleNewExploration = () => {
     createNewExploration();
+    setIsOpen(false); // Close the sidebar
+    // Logic to focus on input for new message (implementation needed)
   };
   
   // Handle deleting the current exploration - no confirmation dialog
@@ -100,21 +102,18 @@ export default function SidePanel() {
   };
   
   // Get a display title for an exploration based on its first meaningful node
-  const getExplorationTitle = (exploration: any) => {
+  const getExplorationTitle = (exploration: { nodes: Record<string, { question?: string }> }): string => {
     // Find the first node with a question
     const nodesWithQuestions = Object.values(exploration.nodes)
-      .filter((node: any) => node.question);
-    
+      .filter((node) => node.question);
+
     if (nodesWithQuestions.length > 0) {
       // Use the first node's question as the title
-      const firstNode = nodesWithQuestions[0] as any;
-      // Truncate to first 30 chars or first line
-      const title = firstNode.question.split('\n')[0].substring(0, 30);
-      return title + (title.length >= 30 ? '...' : '');
+      return nodesWithQuestions[0].question || '';
     }
-    
-    // Fallback to the default title
-    return exploration.title;
+
+    // Fallback to an empty string if no question is found
+    return '';
   };
   
   // Handle logout
@@ -129,6 +128,11 @@ export default function SidePanel() {
       setIsLoggingOut(false);
     }
   };
+  
+  // Filter explorations to only show those with messages
+  const explorationsWithMessages = Object.entries(explorations).filter(([, exploration]) =>
+    Object.values(exploration.nodes).some(node => node.question)
+  );
   
   // Don't render content until client-side and theme is loaded
   if (!mounted || !isLoaded) {
@@ -185,8 +189,8 @@ export default function SidePanel() {
         
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
-            {Object.keys(explorations).length > 0 ? (
-              Object.entries(explorations).map(([explorationId, exploration]) => (
+            {explorationsWithMessages.length > 0 ? (
+              explorationsWithMessages.map(([explorationId, exploration]) => (
                 <div 
                   key={explorationId}
                   className={cn(
@@ -229,46 +233,6 @@ export default function SidePanel() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                  
-                  {/* Exploration nodes - only show if expanded */}
-                  {expandedExplorations[explorationId] && (
-                    <div className="p-2 space-y-2">
-                      {Object.values(exploration.nodes)
-                        .filter(node => node.question)
-                        .map(node => (
-                          <div 
-                            key={node.id}
-                            className={cn(
-                              "p-2 rounded-md cursor-pointer transition-colors hover:bg-accent group",
-                              activeNodeId === node.id ? "bg-accent" : ""
-                            )}
-                            onClick={() => handleNodeClick(node.id)}
-                          >
-                            <div className="flex items-start gap-2">
-                              <ChevronRight className="h-4 w-4 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              <div className="flex-1">
-                                <p className="text-sm line-clamp-2">{node.question}</p>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                                onClick={(e) => handleDeleteBurrow(node.id, e)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                        
-                      {Object.values(exploration.nodes)
-                        .filter(node => node.question).length === 0 && (
-                        <div className="text-center py-4 text-muted-foreground">
-                          <p className="text-xs">No messages in this exploration</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               ))
             ) : (

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { MotionValue } from 'framer-motion';
 import { Node } from '@/types';
+import { useExplorationStore } from '@/store/explorationStore';
 
 /**
  * Props for the useNodeDragging hook
@@ -56,6 +57,9 @@ export function useNodeDragging({
 }: UseNodeDraggingProps): UseNodeDraggingReturn {
   // Track which node is being dragged
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  
+  // Get the resolveCollisionsForNode function from the store
+  const resolveCollisionsForNode = useExplorationStore((state) => state.resolveCollisionsForNode);
   
   // Use refs to track state without re-renders
   const draggedNodeRef = useRef<{
@@ -176,77 +180,68 @@ export function useNodeDragging({
     // Remove event listeners with the same options used when adding them
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
-    window.removeEventListener('touchmove', handleTouchMove, { passive: false, capture: true } as any);
+    window.removeEventListener('touchmove', handleTouchMove, { passive: false } as any);
     window.removeEventListener('touchend', handleTouchEnd);
     
     // Reset refs and state
     isDraggingRef.current = false;
   }, [handleMouseMove, handleTouchMove]);
   
-  // Function references for mouseUp and touchEnd need to be declared before use
-  // Using functions instead of vars to satisfy TypeScript
-  // eslint-disable-next-line
-  function handleMouseUp(e: MouseEvent) {
+  // Handle mouse up - finalize dragging
+  const handleMouseUp = useCallback((e: MouseEvent) => {
     // Only process if we were dragging
     if (isDraggingRef.current && draggedNodeRef.current) {
       // Prevent default browser behavior
       e.preventDefault();
       
-      const { nodeId, hasMoved, wasActive } = draggedNodeRef.current;
+      const { nodeId, hasMoved, currentPos } = draggedNodeRef.current;
       
       // Do one final position update to ensure store is in sync with DOM
-      if (hasMoved && draggedNodeRef.current.currentPos) {
-        updateNodePosition(nodeId, draggedNodeRef.current.currentPos);
+      if (hasMoved && currentPos) {
+        updateNodePosition(nodeId, currentPos);
+        resolveCollisionsForNode(nodeId); // Resolve collisions here
       }
       
-      // Reset dragging node ID (this will trigger a re-render)
+      // Reset state
       setDraggingNodeId(null);
       
-      // Restore active node state if this node was active before dragging
-      if (wasActive) {
-        // Use setTimeout to ensure dragging state is fully cleared first
-        setTimeout(() => setActiveNode(nodeId), 0);
-      }
-      
-      // Clean up the drag operation
+      // Clean up drag-related resources and listeners
       cleanupDrag();
+      
+      // Clear the ref to show we're no longer tracking this node
       draggedNodeRef.current = null;
     }
-  }
+  }, [updateNodePosition, resolveCollisionsForNode, cleanupDrag]);
   
-  // eslint-disable-next-line
-  function handleTouchEnd(e: TouchEvent) {
+  // Handle touch end - same as mouse up but for touch events
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
     // Only process if we were dragging
     if (isDraggingRef.current && draggedNodeRef.current) {
       // Prevent default browser behavior
       e.preventDefault();
       
-      const { nodeId, hasMoved, wasActive } = draggedNodeRef.current;
+      const { nodeId, hasMoved, currentPos } = draggedNodeRef.current;
       
       // Do one final position update to ensure store is in sync with DOM
-      if (hasMoved && draggedNodeRef.current.currentPos) {
-        updateNodePosition(nodeId, draggedNodeRef.current.currentPos);
+      if (hasMoved && currentPos) {
+        updateNodePosition(nodeId, currentPos);
+        resolveCollisionsForNode(nodeId); // Resolve collisions here
       }
       
-      // Reset dragging node ID (this will trigger a re-render)
+      // Reset state
       setDraggingNodeId(null);
       
-      // Restore active node state if this node was active before dragging
-      if (wasActive) {
-        // Use setTimeout to ensure dragging state is fully cleared first
-        setTimeout(() => setActiveNode(nodeId), 0);
-      }
-      
-      // Clean up the drag operation
+      // Clean up drag-related resources and listeners
       cleanupDrag();
+      
+      // Clear the ref to show we're no longer tracking this node
       draggedNodeRef.current = null;
     }
-  }
+  }, [updateNodePosition, resolveCollisionsForNode, cleanupDrag]);
   
   // Handle initial mouse down on a node
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, node: Node) => {
     // Improved grab handle detection - check both the target and any parent up the tree
-    // This fixes "dead spots" by ensuring all parts of the handle trigger dragging
     const target = e.target as HTMLElement;
     const isGrabHandle = 
       target.hasAttribute('data-grab-handle') || 
@@ -268,13 +263,8 @@ export function useNodeDragging({
       // Mark this node as being dragged
       setDraggingNodeId(node.id);
       
-      // Check if this node is currently active
-      const isActive = node.id === activeNodeId;
-      
-      // If the node is active, temporarily unset active node to prevent centering
-      if (isActive) {
-        setActiveNode('');
-      }
+      // Unselect the node completely
+      setActiveNode('');
       
       // Get current canvas state - important for coordinate transformation
       const currentCanvasX = x.get();
@@ -291,7 +281,7 @@ export function useNodeDragging({
         currentPos: { ...node.position },
         canvasStartPos: { x: currentCanvasX, y: currentCanvasY },
         canvasStartScale: currentScale,
-        wasActive: isActive
+        wasActive: false // No longer track active state
       };
       
       isDraggingRef.current = true;
@@ -307,7 +297,7 @@ export function useNodeDragging({
       document.addEventListener('touchmove', handleTouchMove, { passive: false });
       document.addEventListener('touchend', handleTouchEnd);
     }
-  }, [updateNodeOnFrame, handleMouseMove, handleTouchMove, setDraggingNodeId, x, y, scale, activeNodeId, setActiveNode]);
+  }, [updateNodeOnFrame, handleMouseMove, handleTouchMove, setDraggingNodeId, x, y, scale, setActiveNode]);
   
   // Clean up event listeners if component unmounts during drag
   useEffect(() => {

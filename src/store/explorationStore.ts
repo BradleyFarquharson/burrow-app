@@ -1,23 +1,100 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Node, Connection, Exploration } from '@/types';
+import { Node, Exploration, Connection } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Default position values that work on both server and client
 const DEFAULT_X = 500;
 const DEFAULT_Y = 300;
 
-interface ExplorationState {
+// Helper Functions for collision detection and resolution
+const getNodeSize = (node: Node): { width: number; height: number } => {
+  if (node.type === 'explore') {
+    // Adjust based on your logic for expanded/collapsed state
+    return node.question ? { width: 384, height: 320 } : { width: 320, height: 140 };
+  }
+  return { width: 240, height: 150 };
+};
+
+const doNodesOverlap = (node1: Node, node2: Node): boolean => {
+  const size1 = getNodeSize(node1);
+  const size2 = getNodeSize(node2);
+  
+  // Use the same buffer for both horizontal and vertical collision detection
+  const buffer = 20; // 20px buffer on all sides
+  
+  const left1 = node1.position.x - size1.width / 2 - buffer;
+  const right1 = node1.position.x + size1.width / 2 + buffer;
+  const top1 = node1.position.y - size1.height / 2 - buffer;
+  const bottom1 = node1.position.y + size1.height / 2 + buffer;
+  
+  const left2 = node2.position.x - size2.width / 2 - buffer;
+  const right2 = node2.position.x + size2.width / 2 + buffer;
+  const top2 = node2.position.y - size2.height / 2 - buffer;
+  const bottom2 = node2.position.y + size2.height / 2 + buffer;
+  
+  // Check for overlap in both directions
+  return left1 < right2 && right1 > left2 && top1 < bottom2 && bottom1 > top2;
+};
+
+const resolveCollisionsForNode = (nodes: Record<string, Node>, nodeId: string) => {
+  const maxIterations = 10;
+  let iteration = 0;
+  let hasOverlaps = true;
+
+  while (hasOverlaps && iteration < maxIterations) {
+    hasOverlaps = false;
+    iteration++;
+
+    const movedNode = nodes[nodeId];
+    if (!movedNode) return;
+
+    Object.values(nodes).forEach((otherNode) => {
+      if (otherNode.id === nodeId) return;
+
+      const size1 = getNodeSize(movedNode);
+      const size2 = getNodeSize(otherNode);
+
+      const left1 = movedNode.position.x - size1.width / 2;
+      const right1 = movedNode.position.x + size1.width / 2;
+      const top1 = movedNode.position.y - size1.height / 2;
+      const bottom1 = movedNode.position.y + size1.height / 2;
+
+      const left2 = otherNode.position.x - size2.width / 2;
+      const right2 = otherNode.position.x + size2.width / 2;
+      const top2 = otherNode.position.y - size2.height / 2;
+      const bottom2 = otherNode.position.y + size2.height / 2;
+
+      const overlapX = Math.min(right1, right2) - Math.max(left1, left2);
+      const overlapY = Math.min(bottom1, bottom2) - Math.max(top1, top2);
+
+      if (overlapX > 0 && overlapY > 0) {
+        hasOverlaps = true;
+        if (overlapX < overlapY) {
+          const moveDirection = movedNode.position.x < otherNode.position.x ? -1 : 1;
+          movedNode.position.x += moveDirection * overlapX; // Move by exact overlap amount
+        } else {
+          const moveDirection = movedNode.position.y < otherNode.position.y ? -1 : 1;
+          movedNode.position.y += moveDirection * overlapY; // Move by exact overlap amount
+        }
+      }
+    });
+  }
+};
+
+export interface ExplorationState {
   // Explorations collection - each exploration is a separate chat
   explorations: Record<string, Exploration>;
   currentExplorationId: string | null;
   
   // Main data structure - nodes and their connections
   nodes: Record<string, Node>;
-  connections: Connection[];
   
   // Active node that's currently being viewed
   activeNodeId: string;
+  
+  // Connections
+  connections: Connection[];
   
   // Actions
   setActiveNode: (nodeId: string) => void;
@@ -33,6 +110,18 @@ interface ExplorationState {
   deleteNode: (nodeId: string) => void;
   switchExploration: (explorationId: string) => void;
   updateExplorationTitle: (explorationId: string, title: string) => void;
+  
+  // Add a new action to handle repositioning nodes when one is expanded
+  repositionOverlappingNodes: (expandedNodeId: string, expanded: boolean) => void;
+  
+  // New action for collision resolution
+  resolveCollisionsForNode: (nodeId: string) => void;
+  
+  // Helper function to check if a node has children
+  hasChildNodes: (nodeId: string) => boolean;
+  
+  // New action to manage connections
+  setConnections: (newConnections: Connection[]) => void;
 }
 
 // Create a default exploration
@@ -54,7 +143,6 @@ const createDefaultExploration = (): Exploration => {
         // No question field by default - this will show the initial state
       },
     },
-    connections: [],
     activeNodeId: 'explore',
   };
 };
@@ -74,10 +162,12 @@ const useExplorationStore = create<ExplorationState>()(
         
         // Main data structure - nodes and their connections
         nodes: defaultExploration.nodes,
-        connections: defaultExploration.connections,
         
         // Active node that's currently being viewed
         activeNodeId: defaultExploration.activeNodeId,
+        
+        // Connections
+        connections: [],
         
         // Actions
         setActiveNode: (nodeId) => {
@@ -159,62 +249,64 @@ const useExplorationStore = create<ExplorationState>()(
           set((state) => {
             const updatedNodes = {
               ...state.nodes,
-              [nodeId]: {
-                ...state.nodes[nodeId],
-                position,
-              },
+              [nodeId]: { ...state.nodes[nodeId], position },
             };
-            
-            // Also update the current exploration
-            const { currentExplorationId, explorations } = state;
-            const updatedExplorations = currentExplorationId ? {
-              ...explorations,
-              [currentExplorationId]: {
-                ...explorations[currentExplorationId],
-                nodes: updatedNodes,
-                updatedAt: new Date().toISOString(),
-              }
-            } : explorations;
-            
-            return {
-              nodes: updatedNodes,
-              explorations: updatedExplorations,
-            };
+            const currentExplorationId = state.currentExplorationId;
+            const explorations = currentExplorationId
+              ? {
+                  ...state.explorations,
+                  [currentExplorationId]: {
+                    ...state.explorations[currentExplorationId],
+                    nodes: updatedNodes,
+                    updatedAt: new Date().toISOString(),
+                  },
+                }
+              : state.explorations;
+            return { nodes: updatedNodes, explorations };
           });
         },
         
         addBranchNodes: (parentId, branchNodes) => {
           set((state) => {
-            // Add new nodes and connections logic here
-            const newNodes = {...state.nodes};
+            const newNodes = { ...state.nodes };
             const newConnections = [...state.connections];
+            const parentNode = newNodes[parentId];
+            const offsetX = 500; // Horizontal offset remains the same
+            const verticalSpacing = 80; // Fixed vertical spacing
             
-            // Add all branch nodes
-            branchNodes.forEach((node) => {
+            const totalNodes = branchNodes.length;
+            const middleIndex = Math.floor(totalNodes / 2);
+
+            branchNodes.forEach((node, index) => {
+              // Center the middle node vertically with the parent node
+              const verticalOffset = (index - middleIndex) * verticalSpacing;
+              
+              node.position = {
+                x: parentNode.position.x + offsetX,
+                y: parentNode.position.y + verticalOffset
+              };
               newNodes[node.id] = node;
-              newConnections.push({
-                source: parentId,
-                target: node.id
-              });
+              resolveCollisionsForNode(newNodes, node.id); // Ensure collision detection
+              // Create a connection from the parent to the new node
+              newConnections.push({ source: parentId, target: node.id });
             });
-            
-            // Also update the current exploration
-            const { currentExplorationId, explorations } = state;
-            const updatedExplorations = currentExplorationId ? {
-              ...explorations,
-              [currentExplorationId]: {
-                ...explorations[currentExplorationId],
-                nodes: newNodes,
-                connections: newConnections,
-                updatedAt: new Date().toISOString(),
-              }
-            } : explorations;
-            
-            return {
-              nodes: newNodes,
-              connections: newConnections,
-              explorations: updatedExplorations,
-            };
+
+            const currentExplorationId = state.currentExplorationId;
+            const explorations = currentExplorationId
+              ? {
+                  ...state.explorations,
+                  [currentExplorationId]: {
+                    ...state.explorations[currentExplorationId],
+                    nodes: newNodes,
+                    connections: newConnections,
+                    updatedAt: new Date().toISOString(),
+                  },
+                }
+              : state.explorations;
+            console.log('Adding branch nodes:', branchNodes);
+            console.log('Current nodes:', newNodes);
+            console.log('Current connections:', newConnections);
+            return { nodes: newNodes, connections: newConnections, explorations };
           });
         },
         
@@ -238,7 +330,6 @@ const useExplorationStore = create<ExplorationState>()(
             },
             currentExplorationId: newExploration.id,
             nodes: newExploration.nodes,
-            connections: newExploration.connections,
             activeNodeId: newExploration.activeNodeId,
           }));
         },
@@ -253,7 +344,6 @@ const useExplorationStore = create<ExplorationState>()(
             // or create a new one if there are none left
             let newCurrentId = currentExplorationId;
             let newNodes = state.nodes;
-            let newConnections = state.connections;
             let newActiveNodeId = state.activeNodeId;
             
             if (currentExplorationId === explorationId) {
@@ -263,7 +353,6 @@ const useExplorationStore = create<ExplorationState>()(
                 newCurrentId = remainingIds[0];
                 const currentExploration = updatedExplorations[newCurrentId];
                 newNodes = currentExploration.nodes;
-                newConnections = currentExploration.connections;
                 newActiveNodeId = currentExploration.activeNodeId;
               } else {
                 // Create a new exploration if none left
@@ -271,7 +360,6 @@ const useExplorationStore = create<ExplorationState>()(
                 updatedExplorations[newExploration.id] = newExploration;
                 newCurrentId = newExploration.id;
                 newNodes = newExploration.nodes;
-                newConnections = newExploration.connections;
                 newActiveNodeId = newExploration.activeNodeId;
               }
             }
@@ -280,7 +368,6 @@ const useExplorationStore = create<ExplorationState>()(
               explorations: updatedExplorations,
               currentExplorationId: newCurrentId,
               nodes: newNodes,
-              connections: newConnections,
               activeNodeId: newActiveNodeId,
             };
           });
@@ -297,11 +384,6 @@ const useExplorationStore = create<ExplorationState>()(
             const updatedNodes = { ...state.nodes };
             delete updatedNodes[nodeId];
             
-            // Remove any connections involving this node
-            const updatedConnections = state.connections.filter(
-              conn => conn.source !== nodeId && conn.target !== nodeId
-            );
-            
             // Update active node if needed
             let updatedActiveNodeId = state.activeNodeId;
             if (updatedActiveNodeId === nodeId) {
@@ -316,7 +398,6 @@ const useExplorationStore = create<ExplorationState>()(
               [currentExplorationId]: {
                 ...explorations[currentExplorationId],
                 nodes: updatedNodes,
-                connections: updatedConnections,
                 activeNodeId: updatedActiveNodeId,
                 updatedAt: new Date().toISOString(),
               }
@@ -324,7 +405,6 @@ const useExplorationStore = create<ExplorationState>()(
             
             return {
               nodes: updatedNodes,
-              connections: updatedConnections,
               activeNodeId: updatedActiveNodeId,
               explorations: updatedExplorations,
             };
@@ -341,7 +421,6 @@ const useExplorationStore = create<ExplorationState>()(
             return {
               currentExplorationId: explorationId,
               nodes: exploration.nodes,
-              connections: exploration.connections,
               activeNodeId: exploration.activeNodeId,
             };
           });
@@ -361,6 +440,208 @@ const useExplorationStore = create<ExplorationState>()(
                 }
               }
             };
+          });
+        },
+        
+        // Add a new action to handle repositioning nodes when one is expanded
+        repositionOverlappingNodes: (expandedNodeId, expanded) => {
+          set((state) => {
+            // If not expanded, we don't need to reposition
+            if (!expanded) return state;
+            
+            const nodes = {...state.nodes};
+            const expandedNode = nodes[expandedNodeId];
+            if (!expandedNode) return state;
+            
+            // Define node dimensions based on type and expanded state
+            const getNodeDimensions = (node: Node) => {
+              // Calculate width - ExploreNodes are wider
+              let width = node.type === 'explore' ? 
+                (node.question ? 384 : 320) : // w-96 vs w-80
+                240; // w-60 for branch nodes
+              
+              // Calculate height - nodes with questions are taller
+              let height = node.type === 'explore' ? 
+                (node.question ? 320 : 140) : // Explore nodes are taller when expanded
+                (node.question ? 240 : 140);  // Branch nodes height
+              
+              return { width, height };
+            };
+            
+            // Get dimensions of the expanded node
+            const expandedDimensions = getNodeDimensions(expandedNode);
+            
+            // Create a safety buffer around the expanded node
+            const buffer = 40; // Increased buffer for more spacing between nodes
+            
+            // Calculate expanded node bounds with buffer
+            const expandedBounds = {
+              left: expandedNode.position.x - expandedDimensions.width / 2 - buffer,
+              right: expandedNode.position.x + expandedDimensions.width / 2 + buffer,
+              top: expandedNode.position.y - expandedDimensions.height / 2 - buffer,
+              bottom: expandedNode.position.y + expandedDimensions.height / 2 + buffer
+            };
+            
+            // Find all nodes that need to be repositioned (nodes that overlap with the expanded node)
+            const nodesToReposition = Object.values(nodes).filter(node => {
+              if (node.id === expandedNodeId) return false; // Skip the expanded node itself
+              
+              const nodeDimensions = getNodeDimensions(node);
+              
+              // Calculate node bounds
+              const nodeBounds = {
+                left: node.position.x - nodeDimensions.width / 2,
+                right: node.position.x + nodeDimensions.width / 2,
+                top: node.position.y - nodeDimensions.height / 2,
+                bottom: node.position.y + nodeDimensions.height / 2
+              };
+              
+              // Check for overlap
+              const overlapsHorizontally = 
+                nodeBounds.right > expandedBounds.left && 
+                nodeBounds.left < expandedBounds.right;
+                
+              const overlapsVertically = 
+                nodeBounds.bottom > expandedBounds.top && 
+                nodeBounds.top < expandedBounds.bottom;
+                
+              return overlapsHorizontally && overlapsVertically;
+            });
+            
+            // Reposition overlapping nodes
+            if (nodesToReposition.length > 0) {
+              // For each overlapping node, move it away from the expanded node
+              nodesToReposition.forEach(node => {
+                // Calculate exactly how much to move to get out of overlap
+                const dx = node.position.x - expandedNode.position.x;
+                const dy = node.position.y - expandedNode.position.y;
+                
+                // Determine preferred direction to move: 
+                // - If mostly aligned horizontally, move vertically
+                // - If mostly aligned vertically, move horizontally
+                let preferVertical = Math.abs(dy) <= Math.abs(dx);
+                
+                if (preferVertical) {
+                  // Move vertically if nodes are more horizontally aligned
+                  // Calculate exactly how much to move to get out of overlap
+                  const verticalShift = dy >= 0 ? 
+                    (expandedBounds.bottom - (node.position.y - expandedDimensions.height/2)) + buffer : 
+                    -((node.position.y + expandedDimensions.height/2) - expandedBounds.top) - buffer;
+                  
+                  nodes[node.id] = {
+                    ...node,
+                    position: {
+                      ...node.position,
+                      y: node.position.y + verticalShift
+                    }
+                  };
+                } else {
+                  // Move horizontally if nodes are more vertically aligned
+                  // Calculate exactly how much to move to get out of overlap
+                  const horizontalShift = dx >= 0 ? 
+                    (expandedBounds.right - (node.position.x - expandedDimensions.width/2)) + buffer : 
+                    -((node.position.x + expandedDimensions.width/2) - expandedBounds.left) - buffer;
+                  
+                  nodes[node.id] = {
+                    ...node,
+                    position: {
+                      ...node.position,
+                      x: node.position.x + horizontalShift
+                    }
+                  };
+                }
+              });
+            }
+            
+            // Also update the current exploration with the new node positions
+            const { currentExplorationId, explorations } = state;
+            const updatedExplorations = currentExplorationId ? {
+              ...explorations,
+              [currentExplorationId]: {
+                ...explorations[currentExplorationId],
+                nodes: nodes,
+                updatedAt: new Date().toISOString(),
+              }
+            } : explorations;
+            
+            return {
+              nodes,
+              explorations: updatedExplorations
+            };
+          });
+        },
+        
+        // New action to resolve collisions for a node
+        resolveCollisionsForNode: (nodeId) => {
+          set((state) => {
+            const nodes = { ...state.nodes };
+            resolveCollisionsForNode(nodes, nodeId);
+            const currentExplorationId = state.currentExplorationId;
+            const explorations = currentExplorationId
+              ? {
+                  ...state.explorations,
+                  [currentExplorationId]: {
+                    ...state.explorations[currentExplorationId],
+                    nodes,
+                    updatedAt: new Date().toISOString(),
+                  },
+                }
+              : state.explorations;
+            return { nodes, explorations };
+          });
+        },
+        
+        // Helper function to check if a node has children
+        hasChildNodes: (nodeId: string) => {
+          const { nodes } = get();
+          
+          // Check if there are any branch nodes that were created from this node
+          // We do this by checking the positions of all branch nodes
+          // If a branch node's x position is to the right of this node, and it's within a certain
+          // vertical range, we consider it a child of this node
+          
+          const parentNode = nodes[nodeId];
+          if (!parentNode) return false;
+          
+          // Get all branch nodes
+          const branchNodes = Object.values(nodes).filter(node => 
+            node.type === 'branch' && node.id !== nodeId
+          );
+          
+          // Check if any branch node is positioned to the right of this node
+          // with a horizontal offset that suggests it's a child
+          const childNodes = branchNodes.filter(node => {
+            // Horizontal check - node should be to the right of parent
+            // Reduced the minimum distance to better detect children
+            const isToTheRight = node.position.x > parentNode.position.x + 200;
+            
+            // Vertical check - node should be within a certain vertical range of parent
+            // Increased vertical range to better detect children that might be positioned further up/down
+            const verticalRange = 300; // Increased from 200
+            const isWithinVerticalRange = 
+              Math.abs(node.position.y - parentNode.position.y) < verticalRange;
+            
+            return isToTheRight && isWithinVerticalRange;
+          });
+          
+          return childNodes.length > 0;
+        },
+        
+        // New action to manage connections
+        setConnections: (newConnections: Connection[]) => {
+          set((state) => {
+            const currentExplorationId = state.currentExplorationId;
+            const explorations = currentExplorationId
+              ? {
+                  ...state.explorations,
+                  [currentExplorationId]: {
+                    ...state.explorations[currentExplorationId],
+                    connections: newConnections,
+                    updatedAt: new Date().toISOString(),
+                  },
+                }
+              : state.explorations;
+            return { connections: newConnections, explorations };
           });
         },
       };

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     
     Provide:
     1. A concise answer (2-3 sentences)
-    2. 3-5 interesting related branches to explore further
+    2. 5 interesting related branches to explore further
     
     Format your response as a JSON object:
     {
