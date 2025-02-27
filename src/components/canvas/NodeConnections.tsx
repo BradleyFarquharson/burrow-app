@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useExplorationStore } from '@/store/explorationStore';
 import { Node } from '@/types';
 import SmoothCircle from './SmoothCircle';
+import { NODE_SIZES, DEFAULT_NODE_SIZE } from '@/config/nodeConfig';
 
 interface StableConnection {
   source: string;
@@ -28,17 +29,17 @@ export default function NodeConnections(): React.ReactElement {
     setStableConnections(connections);
   }, [connections]);
   
-  // Calibrated width values for perfect alignment
-  const getNodeWidth = (nodeType: string): number => {
-    return nodeType === 'explore' ? 333 : 233;
-  };
+  // Remove getNodeWidth as it's no longer needed
+  const ANCHOR_OFFSET = 14; // Fixed offset matching AnchorDot's CSS positioning
 
-  // Precise anchor offsets
-  const getAnchorOffset = (nodeType: string, position: 'source' | 'target'): number => {
-    if (nodeType === 'explore') {
-      return position === 'source' ? 18 : 18; // Further adjusted offsets for explore node
-    }
-    return 11; // Default offset for other nodes
+  // Anchor position calculation using node width for edge positioning
+  const getAnchorPosition = (node: Node, position: 'source' | 'target'): { x: number; y: number } => {
+    const width = 400; // Fixed width matching the Card components
+    return {
+      // Calculate based on node edges
+      x: node.position.x + (position === 'source' ? width / 2 : -width / 2),
+      y: node.position.y
+    };
   };
   
   // Update dot positions when nodes are moved
@@ -53,14 +54,13 @@ export default function NodeConnections(): React.ReactElement {
           const targetNode = nodes[connection.target];
           if (!sourceNode || !targetNode) return point;
 
-          const sourceAnchorX = sourceNode.position.x + getNodeWidth(sourceNode.type) / 2 + getAnchorOffset(sourceNode.type, 'source');
-          const sourceAnchorY = sourceNode.position.y;
-          const targetAnchorX = targetNode.position.x - getNodeWidth(targetNode.type) / 2 - getAnchorOffset(targetNode.type, 'target');
-          const targetAnchorY = targetNode.position.y;
+          // Get exact anchor positions
+          const sourceAnchor = getAnchorPosition(sourceNode, 'source');
+          const targetAnchor = getAnchorPosition(targetNode, 'target');
 
           // Calculate the relative position of the point on the Bezier curve
           const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          pathElement.setAttribute('d', `M ${sourceAnchorX} ${sourceAnchorY} C ${sourceAnchorX + 50} ${sourceAnchorY}, ${targetAnchorX - 50} ${targetAnchorY}, ${targetAnchorX} ${targetAnchorY}`);
+          pathElement.setAttribute('d', `M ${sourceAnchor.x} ${sourceAnchor.y} C ${sourceAnchor.x + 50} ${sourceAnchor.y}, ${targetAnchor.x - 50} ${targetAnchor.y}, ${targetAnchor.x} ${targetAnchor.y}`);
           const totalLength = pathElement.getTotalLength();
           const pointAtLength = pathElement.getPointAtLength(totalLength * point.relativePosition);
 
@@ -94,29 +94,21 @@ export default function NodeConnections(): React.ReactElement {
       return null;
     }
 
-    const sourceNodeWidth = getNodeWidth(sourceNode.type);
-    const sourceNodeHalfWidth = sourceNodeWidth / 2;
-    const sourceAnchorOffset = getAnchorOffset(sourceNode.type, 'source');
-    const sourceAnchorX = sourceNode.position.x + sourceNodeHalfWidth + sourceAnchorOffset;
-    const sourceAnchorY = sourceNode.position.y;
+    // Get exact anchor positions
+    const sourceAnchor = getAnchorPosition(sourceNode, 'source');
+    const targetAnchor = getAnchorPosition(targetNode, 'target');
 
-    const targetNodeWidth = getNodeWidth(targetNode.type);
-    const targetNodeHalfWidth = targetNodeWidth / 2;
-    const targetAnchorOffset = getAnchorOffset(targetNode.type, 'target');
-    const targetAnchorX = targetNode.position.x - targetNodeHalfWidth - targetAnchorOffset;
-    const targetAnchorY = targetNode.position.y;
-
-    const distance = Math.sqrt(Math.pow(targetAnchorX - sourceAnchorX, 2) + Math.pow(targetAnchorY - sourceAnchorY, 2));
+    const distance = Math.sqrt(Math.pow(targetAnchor.x - sourceAnchor.x, 2) + Math.pow(targetAnchor.y - sourceAnchor.y, 2));
     const dynamicControlPointOffset = Math.min(50, distance / 4);
 
-    const controlPointX1 = sourceAnchorX + dynamicControlPointOffset;
-    const controlPointX2 = targetAnchorX - dynamicControlPointOffset;
-    const path = `M ${sourceAnchorX} ${sourceAnchorY} C ${controlPointX1} ${sourceAnchorY}, ${controlPointX2} ${targetAnchorY}, ${targetAnchorX} ${targetAnchorY}`;
+    const controlPointX1 = sourceAnchor.x + dynamicControlPointOffset;
+    const controlPointX2 = targetAnchor.x - dynamicControlPointOffset;
+    const path = `M ${sourceAnchor.x} ${sourceAnchor.y} C ${controlPointX1} ${sourceAnchor.y}, ${controlPointX2} ${targetAnchor.y}, ${targetAnchor.x} ${targetAnchor.y}`;
 
     const isNearPath = (x: number, y: number): boolean => {
       const tolerance = 15;
-      const distToControl1 = Math.sqrt(Math.pow(x - controlPointX1, 2) + Math.pow(y - sourceAnchorY, 2));
-      const distToControl2 = Math.sqrt(Math.pow(x - controlPointX2, 2) + Math.pow(y - targetAnchorY, 2));
+      const distToControl1 = Math.sqrt(Math.pow(x - controlPointX1, 2) + Math.pow(y - sourceAnchor.y, 2));
+      const distToControl2 = Math.sqrt(Math.pow(x - controlPointX2, 2) + Math.pow(y - targetAnchor.y, 2));
       return distToControl1 < tolerance || distToControl2 < tolerance;
     };
 
@@ -205,7 +197,7 @@ export default function NodeConnections(): React.ReactElement {
           strokeWidth="1.5"
           fill="none"
           strokeLinecap="round"
-          pointerEvents="none"
+          pointerEvents="stroke"
           style={{ cursor: 'pointer' }}
           onClick={(e: React.MouseEvent<SVGPathElement, MouseEvent>) => handleAddPoint(e, sourceNodeId, targetNodeId)}
         />
