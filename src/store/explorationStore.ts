@@ -1,19 +1,40 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Node, Exploration, Connection } from '@/types';
+import { Node, Exploration, Connection, Branch } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { NodeSize, DEFAULT_NODE_SIZE, NODE_SIZES } from '@/config/nodeConfig';
 
 // Default position values that work on both server and client
 const DEFAULT_X = 500;
 const DEFAULT_Y = 300;
 
+// Helper to calculate appropriate node size based on content
+const calculateNodeSize = (node: Node): NodeSize => {
+  // Calculate content length
+  const contentLength = node.content?.length || 0;
+  const questionLength = node.question?.length || 0;
+  const descriptionLength = node.type === 'branch' ? 
+    ('description' in node ? node.description?.length || 0 : 0) : 0;
+  
+  // Get the maximum content length
+  const maxLength = Math.max(contentLength, questionLength, descriptionLength);
+  
+  // Select size based on content length
+  if (maxLength > 400) return 'xl';
+  if (maxLength > 300) return 'lg';
+  if (maxLength > 200) return 'md';
+  return 'sm';
+};
+
 // Helper Functions for collision detection and resolution
 const getNodeSize = (node: Node): { width: number; height: number } => {
-  if (node.type === 'explore') {
-    // Adjust based on your logic for expanded/collapsed state
-    return node.question ? { width: 384, height: 320 } : { width: 320, height: 140 };
-  }
-  return { width: 240, height: 150 };
+  const size = node.size || calculateNodeSize(node);
+  const dimensions = NODE_SIZES[size];
+  
+  return {
+    width: dimensions.width,
+    height: node.question ? dimensions.maxHeight : dimensions.minHeight
+  };
 };
 
 const doNodesOverlap = (node1: Node, node2: Node): boolean => {
@@ -49,8 +70,21 @@ const resolveCollisionsForNode = (nodes: Record<string, Node>, nodeId: string) =
     const movedNode = nodes[nodeId];
     if (!movedNode) return;
 
+    // Find parent-child relationships for the moved node
+    const store = useExplorationStore.getState();
+    const connections = store.connections;
+    const isParentChild = (node1Id: string, node2Id: string) => {
+      return connections.some((conn: Connection) => 
+        (conn.source === node1Id && conn.target === node2Id) ||
+        (conn.source === node2Id && conn.target === node1Id)
+      );
+    };
+
     Object.values(nodes).forEach((otherNode) => {
       if (otherNode.id === nodeId) return;
+      
+      // Skip collision resolution for parent-child relationships
+      if (isParentChild(movedNode.id, otherNode.id)) return;
 
       const size1 = getNodeSize(movedNode);
       const size2 = getNodeSize(otherNode);
@@ -72,10 +106,10 @@ const resolveCollisionsForNode = (nodes: Record<string, Node>, nodeId: string) =
         hasOverlaps = true;
         if (overlapX < overlapY) {
           const moveDirection = movedNode.position.x < otherNode.position.x ? -1 : 1;
-          movedNode.position.x += moveDirection * overlapX; // Move by exact overlap amount
+          movedNode.position.x += moveDirection * overlapX;
         } else {
           const moveDirection = movedNode.position.y < otherNode.position.y ? -1 : 1;
-          movedNode.position.y += moveDirection * overlapY; // Move by exact overlap amount
+          movedNode.position.y += moveDirection * overlapY;
         }
       }
     });
@@ -122,6 +156,12 @@ export interface ExplorationState {
   
   // New action to manage connections
   setConnections: (newConnections: Connection[]) => void;
+  
+  // Add new actions for node sizing
+  updateNodeSize: (nodeId: string, size: NodeSize) => void;
+  
+  // Add draggingNodeId
+  draggingNodeId: string | null;
 }
 
 // Create a default exploration
@@ -138,9 +178,7 @@ const createDefaultExploration = (): Exploration => {
         content: 'Start your exploration here...',
         type: 'explore',
         position: { x: DEFAULT_X, y: DEFAULT_Y },
-        width: 240, // w-60 = 15rem = 240px at default font size
-        height: 140, // Explore nodes might be slightly taller
-        // No question field by default - this will show the initial state
+        size: DEFAULT_NODE_SIZE,
       },
     },
     activeNodeId: 'explore',
@@ -266,31 +304,39 @@ const useExplorationStore = create<ExplorationState>()(
           });
         },
         
-        addBranchNodes: (parentId, branchNodes) => {
+        addBranchNodes: (parentId, branchNodes) => 
           set((state) => {
             const newNodes = { ...state.nodes };
             const newConnections = [...state.connections];
             const parentNode = newNodes[parentId];
-            const offsetX = 500; // Horizontal offset remains the same
-            const verticalSpacing = 80; // Fixed vertical spacing
             
+            // Fixed spacing values
+            const horizontalOffset = 700; // Adjusted for better balance
+            const verticalSpacing = 160;
+            
+            // Calculate total height needed
             const totalNodes = branchNodes.length;
-            const middleIndex = Math.floor(totalNodes / 2);
-
+            const totalHeight = (totalNodes - 1) * verticalSpacing;
+            
+            // Calculate starting Y position to center the group
+            const startY = parentNode.position.y - (totalHeight / 2);
+            
             branchNodes.forEach((node, index) => {
-              // Center the middle node vertically with the parent node
-              const verticalOffset = (index - middleIndex) * verticalSpacing;
-              
+              // Position each node
               node.position = {
-                x: parentNode.position.x + offsetX,
-                y: parentNode.position.y + verticalOffset
+                x: parentNode.position.x + horizontalOffset,
+                y: startY + (index * verticalSpacing)
               };
+              
+              // Calculate appropriate size based on content
+              node.size = calculateNodeSize(node);
+              
               newNodes[node.id] = node;
-              resolveCollisionsForNode(newNodes, node.id); // Ensure collision detection
-              // Create a connection from the parent to the new node
+              
+              // Create a connection from parent to this node
               newConnections.push({ source: parentId, target: node.id });
             });
-
+            
             const currentExplorationId = state.currentExplorationId;
             const explorations = currentExplorationId
               ? {
@@ -303,12 +349,9 @@ const useExplorationStore = create<ExplorationState>()(
                   },
                 }
               : state.explorations;
-            console.log('Adding branch nodes:', branchNodes);
-            console.log('Current nodes:', newNodes);
-            console.log('Current connections:', newConnections);
+            
             return { nodes: newNodes, connections: newConnections, explorations };
-          });
-        },
+          }),
         
         clearExploration: () => {
           // Create a new exploration instead of clearing the current one
@@ -455,17 +498,13 @@ const useExplorationStore = create<ExplorationState>()(
             
             // Define node dimensions based on type and expanded state
             const getNodeDimensions = (node: Node) => {
-              // Calculate width - ExploreNodes are wider
-              let width = node.type === 'explore' ? 
-                (node.question ? 384 : 320) : // w-96 vs w-80
-                240; // w-60 for branch nodes
+              const size = node.size || calculateNodeSize(node);
+              const dimensions = NODE_SIZES[size];
               
-              // Calculate height - nodes with questions are taller
-              let height = node.type === 'explore' ? 
-                (node.question ? 320 : 140) : // Explore nodes are taller when expanded
-                (node.question ? 240 : 140);  // Branch nodes height
-              
-              return { width, height };
+              return {
+                width: dimensions.width,
+                height: node.question ? dimensions.maxHeight : dimensions.minHeight
+              };
             };
             
             // Get dimensions of the expanded node
@@ -644,6 +683,35 @@ const useExplorationStore = create<ExplorationState>()(
             return { connections: newConnections, explorations };
           });
         },
+        
+        // Add new actions for node sizing
+        updateNodeSize: (nodeId: string, size: NodeSize) => {
+          set((state) => {
+            const nodes = { ...state.nodes };
+            if (nodes[nodeId]) {
+              nodes[nodeId] = {
+                ...nodes[nodeId],
+                size,
+              };
+            }
+            
+            // Also update the current exploration
+            const { currentExplorationId, explorations } = state;
+            const updatedExplorations = currentExplorationId ? {
+              ...explorations,
+              [currentExplorationId]: {
+                ...explorations[currentExplorationId],
+                nodes,
+                updatedAt: new Date().toISOString(),
+              }
+            } : explorations;
+            
+            return { nodes, explorations: updatedExplorations };
+          });
+        },
+        
+        // Add draggingNodeId
+        draggingNodeId: null,
       };
     },
     {

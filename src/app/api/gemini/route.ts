@@ -28,24 +28,58 @@ export async function POST(request: NextRequest) {
     
     // Create the prompt for Gemini
     const promptText = `
-    Based on this question or idea: "${prompt}"
-    
-    Provide:
-    1. A concise answer (2-3 sentences)
-    2. 5 interesting related branches to explore further
-    
-    Format your response as a JSON object:
+You will generate a structured response to the following question:
+"${prompt}"
+
+Requirements:
+
+1. Comprehensive Answer  
+- Write a concise yet detailed response (4-6 sentences).  
+- Directly answer the core question.  
+- Include rich context and explanations to enhance understanding.  
+
+2. Five Key Subtopics  
+Each subtopic must:  
+- Have a clear, short title (5-8 words).  
+- Provide a distinct, informative description (2-3 sentences).  
+- Present new, relevant insights that build on the main answer.  
+- Avoid restating the title in the description.  
+
+3. JSON Output Format  
+Ensure the response follows this structured format:  
+
+{
+  "answer": "Your complete response to the main question.",
+  "branches": [
     {
-      "answer": "Your main answer here",
-      "branches": [
-        {
-          "title": "First branch title",
-          "description": "Brief description of this branch"
-        },
-        // more branches...
-      ]
+      "title": "Subtopic Title (5-8 words)",
+      "description": "A well-developed explanation providing context, importance, and implications of this subtopic."
+    },
+    {
+      "title": "Another Subtopic Title",
+      "description": "Detailed exploration of another key aspect that adds depth to the main answer."
     }
-    `;
+  ]
+}
+
+Example of a Strong Response:  
+
+{
+  "answer": "Apple processing involves strict quality control, from harvesting to packaging, ensuring food safety and freshness. Industry regulations dictate temperature management, chemical testing, and traceability systems to prevent contamination.",
+  "branches": [
+    {
+      "title": "Modern Apple Processing Safety Standards",
+      "description": "Strict food safety guidelines regulate temperature, sanitization, and contamination prevention. Continuous advancements in processing technology ensure compliance with health standards."
+    },
+    {
+      "title": "Impact of Climate on Apple Yield",
+      "description": "Weather conditions influence apple quality and harvest cycles. Farmers adapt using controlled environments and genetic modifications to optimize yield."
+    }
+  ]
+}
+
+Ensure clarity, depth, and relevance in all responses while maintaining this structured format.
+`;
     
     // Call Gemini API with updated request format for gemini-2.0-flash
     const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
@@ -68,7 +102,7 @@ export async function POST(request: NextRequest) {
           temperature: 0.7,
           topK: 40,
           topP: 0.95,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 2048,
         }
       }),
     });
@@ -128,7 +162,13 @@ export async function POST(request: NextRequest) {
       if (jsonMatch) {
         // Try to parse the JSON
         try {
-          parsedData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+          // Clean the JSON string by removing trailing commas
+          const jsonString = (jsonMatch[1] || jsonMatch[0])
+            .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+            .replace(/\n/g, ' ') // Remove newlines
+            .replace(/\s+/g, ' '); // Normalize whitespace
+          
+          parsedData = JSON.parse(jsonString);
         } catch (jsonError) {
           console.error('Error parsing JSON from Gemini response:', jsonError);
           throw new Error('Invalid JSON format in response');
@@ -143,6 +183,26 @@ export async function POST(request: NextRequest) {
         console.error('Parsed data missing required fields:', parsedData);
         throw new Error('Response missing required fields');
       }
+
+      // Validate we have all 5 branches
+      if (parsedData.branches.length < 5) {
+        console.error('Not enough branches generated:', parsedData.branches.length);
+        // Add generic branches to make up the difference
+        const genericBranches = [
+          { title: "Additional Perspective", description: "Exploring another angle of this topic" },
+          { title: "Further Implications", description: "Understanding the broader impact and consequences" },
+          { title: "Related Concepts", description: "Examining connected ideas and principles" },
+          { title: "Practical Applications", description: "Real-world uses and implementations" },
+          { title: "Future Developments", description: "Potential evolution and upcoming changes" }
+        ];
+
+        while (parsedData.branches.length < 5) {
+          parsedData.branches.push(genericBranches[parsedData.branches.length]);
+        }
+      }
+      
+      // Log the final response for debugging
+      console.log('Final processed response:', JSON.stringify(parsedData, null, 2));
       
       return NextResponse.json(parsedData);
     } catch (parseError) {

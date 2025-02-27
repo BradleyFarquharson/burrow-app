@@ -1,10 +1,9 @@
 'use client';
 
-import { MutableRefObject, useEffect, useCallback, useMemo, useRef } from 'react';
+import { MutableRefObject, useEffect, useCallback, useRef } from 'react';
 import { useGesture } from '@use-gesture/react';
-import { MotionValue, useSpring } from 'framer-motion';
+import { MotionValue } from 'framer-motion';
 import { animate } from 'framer-motion';
-import { PanInfo } from 'framer-motion';
 
 /**
  * Props for the useCanvasGestures hook
@@ -51,112 +50,78 @@ export function useCanvasGestures({
   onPan,
   onZoom
 }: UseCanvasGesturesProps) {
-  // Apply hardware acceleration to the container element
-  useEffect(() => {
-    if (containerRef.current) {
-      // Force GPU acceleration
-      containerRef.current.style.transform = 'translateZ(0)';
-      containerRef.current.style.backfaceVisibility = 'hidden';
-      
-      // Add handlers for trackpad gestures on macOS
-      const handleGestureStart = (e: any) => {
-        e.preventDefault();
-      };
-      
-      const handleGestureChange = (e: any) => {
-        e.preventDefault();
-      };
-      
-      // These are non-standard webkit events for trackpad gestures
-      containerRef.current.addEventListener('gesturestart', handleGestureStart as EventListener);
-      containerRef.current.addEventListener('gesturechange', handleGestureChange as EventListener);
-      
-      return () => {
-        if (containerRef.current) {
-          containerRef.current.removeEventListener('gesturestart', handleGestureStart as EventListener);
-          containerRef.current.removeEventListener('gesturechange', handleGestureChange as EventListener);
-        }
-      };
-    }
-  }, [containerRef]);
-  
-  // Throttling reference for wheel events
-  const lastWheelEventTime = useRef<number>(0);
-  const THROTTLE_MS = 16; // Approximately 60fps
+  const isDraggingRef = useRef(false);
+  const inertiaAnimationRef = useRef<{ x?: any; y?: any }>({});
 
-  // Use unified gesture handling for better compatibility
+  const stopInertia = useCallback(() => {
+    if (inertiaAnimationRef.current.x) {
+      inertiaAnimationRef.current.x.stop();
+    }
+    if (inertiaAnimationRef.current.y) {
+      inertiaAnimationRef.current.y.stop();
+    }
+    inertiaAnimationRef.current = {};
+  }, []);
+
   const bindGestures = useGesture({
-    // Handle drag for panning the canvas
     onDrag: ({ movement: [mx, my], velocity: [vx, vy], first, last, event, memo = { startX: 0, startY: 0 } }) => {
-      // Skip if we're dragging a node
       if (draggingNodeId) return memo;
-      
-      // Skip if target is a node or inside a node
-      if (event.target instanceof HTMLElement) {
-        const isNodeElement = 
-          event.target.closest('[data-grab-handle="true"]') ||
-          event.target.closest('[data-node-id]');
-        
-        if (isNodeElement) return memo;
+
+      if (event.target instanceof HTMLElement && 
+          (event.target.closest('[data-grab-handle="true"]') || 
+           event.target.closest('[data-node-id]'))) {
+        return memo;
       }
-      
+
       try {
         event.preventDefault();
-      } catch (e) {
-        // Ignore errors about passive events
-      }
-      
+      } catch (e) {}
+
       if (first) {
-        setIsDragging(true);
+        stopInertia();
+        isDraggingRef.current = true;
         memo.startX = x.get();
         memo.startY = y.get();
+        setIsDragging(true);
       }
-      
-      // Calculate new position
+
       const newX = memo.startX + mx;
       const newY = memo.startY + my;
       
-      // Apply movement with immediate response
-      x.set(newX);
-      y.set(newY);
-      
+      if (isDraggingRef.current) {
+        x.set(newX);
+        y.set(newY);
+      }
+
       if (last) {
+        isDraggingRef.current = false;
         setIsDragging(false);
-        
-        // Apply inertia when releasing with significant velocity
+
         if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
-          animate(x, newX + vx * 15, {
+          inertiaAnimationRef.current.x = animate(x, newX + vx * 15, {
             type: "spring",
             velocity: vx,
-            stiffness: 40,
-            damping: 20,
-            restDelta: 0.001
+            stiffness: 100,
+            damping: 30,
+            restDelta: 0.01
           });
           
-          animate(y, newY + vy * 15, {
+          inertiaAnimationRef.current.y = animate(y, newY + vy * 15, {
             type: "spring",
             velocity: vy,
-            stiffness: 40,
-            damping: 20,
-            restDelta: 0.001
+            stiffness: 100,
+            damping: 30,
+            restDelta: 0.01
           });
         }
       }
-      
+
       return memo;
     },
-    
-    // Disable wheel event handling - we handle this directly in Canvas.tsx
-    // onWheel: ({ event }) => {
-    //   onWheel(event as WheelEvent);
-    // },
-    
-    // Handle pinch zoom for touch devices
+
     onPinch: ({ offset: [s], origin: [ox, oy], event }) => {
-      // Skip if we're dragging a node
       if (draggingNodeId) return;
       
-      // Check if this is a touch event with touches property
       const touch = 'touches' in event ? event.touches : null;
       const clientX = touch ? touch[0].clientX : ox;
       const clientY = touch ? touch[0].clientY : oy;
@@ -169,53 +134,25 @@ export function useCanvasGestures({
       rubberband: true,
       delay: 0,
       threshold: 0,
+      bounds: undefined
     },
     wheel: {
-      enabled: false // Completely disable wheel handling here
+      enabled: false
     },
     pinch: {
       eventOptions: { capture: true }
     }
   });
-  
-  // Handle wheel events separately
-  const onWheel = useCallback(
-    (event: WheelEvent) => {
-      // DISABLED: We now handle wheel events directly in Canvas.tsx
-      // Skip processing here to avoid double-handling
-      return;
-      
-      /* Original code commented out
-      // Skip if we're dragging a node
-      if (draggingNodeId) return;
-      
-      // Check if this is a pinch-to-zoom gesture
-      const isPinchZoom = event.ctrlKey || event.metaKey;
-      
-      if (isPinchZoom) {
-        // For pinch-to-zoom gestures, prevent default browser behavior
-        event.preventDefault();
-        event.stopPropagation();
-        
-        // Throttle events for smoother zooming
-        const now = Date.now();
-        if (now - lastWheelEventTime.current < THROTTLE_MS) {
-          return;
-        }
-        lastWheelEventTime.current = now;
-        
-        // Calculate zoom factor and apply zoom
-        const delta = -event.deltaY;
-        const zoomFactor = delta > 0 ? 1.1 : 0.9;
-        onZoom(zoomFactor, event.clientX, event.clientY);
-      } else {
-        // For regular scroll events, use them for panning
-        onPan(-event.deltaX, -event.deltaY);
-      }
-      */
-    },
-    [onPan, onZoom, draggingNodeId]
-  );
-  
+
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.style.transform = 'translateZ(0)';
+      containerRef.current.style.backfaceVisibility = 'hidden';
+    }
+    return () => {
+      stopInertia();
+    };
+  }, [stopInertia, containerRef]);
+
   return bindGestures();
 } 

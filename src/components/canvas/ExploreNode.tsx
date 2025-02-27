@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import DragHandle from './DragHandle';
 import AnchorDot from './AnchorDot';
 import { useZoom } from '@/contexts';
+import { getNodeSizeClasses } from '@/config/nodeConfig';
 
 /**
  * Props for the ExploreNode component
@@ -45,7 +46,8 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
     updateNodeQuestion, 
     setActiveNode,
     repositionOverlappingNodes,
-    hasChildNodes
+    hasChildNodes,
+    draggingNodeId
   } = useExplorationStore();
   
   // Check if the explore node has children
@@ -67,8 +69,10 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
   
   // Effect to call repositionOverlappingNodes when isExpanded changes
   useEffect(() => {
+    // Don't reposition if we're dragging
+    if (draggingNodeId) return;
     repositionOverlappingNodes(node.id, isExpanded);
-  }, [isExpanded, node.id, repositionOverlappingNodes]);
+  }, [isExpanded, node.id, repositionOverlappingNodes, draggingNodeId]);
   
   /**
    * Handles the exploration action when a question is submitted
@@ -77,35 +81,30 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
   const handleExplore = async (): Promise<void> => {
     if (!question.trim()) return;
     
-    // Save the question to the node
-    updateNodeQuestion(node.id, question);
+    // Batch state updates before API call
+    const updates = {
+      question: question.trim(),
+      isExpanded: true,
+      showThinking: true
+    };
     
-    // Expand the node
-    setIsExpanded(true);
+    updateNodeQuestion(node.id, updates.question);
+    setIsExpanded(updates.isExpanded);
+    setShowThinking(updates.showThinking);
     
-    // Set a timer to show the thinking UI if the response takes longer than 300ms
-    thinkingTimerRef.current = setTimeout(() => {
-      setShowThinking(true);
-    }, 300);
-    
-    // Call Gemini API with the current node ID as parent
-    const { answer, branches } = await generateIdeas(question, node.id);
-    
-    // Clear the thinking timer and hide the thinking UI
-    if (thinkingTimerRef.current) {
-      clearTimeout(thinkingTimerRef.current);
-      thinkingTimerRef.current = null;
+    try {
+      // Call Gemini API with the current node ID as parent
+      const { answer, branches } = await generateIdeas(updates.question, node.id);
+      
+      // Batch state updates after API call
+      updateNodeContent(node.id, answer);
+      addBranchNodes(node.id, branches);
+      setShowThinking(false);
+      setQuestion('');
+    } catch (error) {
+      console.error('Error in exploration:', error);
+      setShowThinking(false);
     }
-    setShowThinking(false);
-    
-    // Update the explore node with the answer
-    updateNodeContent(node.id, answer);
-    
-    // Add the branch nodes
-    addBranchNodes(node.id, branches);
-    
-    // Clear the question input
-    setQuestion('');
   };
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -123,12 +122,17 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
       
       <Card 
         className={cn(
-          "shadow-lg relative transition-all duration-300 ease-in-out",
-          "card-container", // Add card-container class for glow effect
-          isExpanded ? "w-96" : "w-80",
+          "shadow-lg relative",
+          "card-container",
+          "w-[400px]",
           isActive && "ring-2 ring-primary",
-          "overflow-visible" // Ensure overflow is visible
+          "overflow-visible"
         )}
+        style={{ 
+          position: 'relative', 
+          zIndex: 1,
+          transition: 'filter 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease'
+        }}
         onClick={(e) => {
           // Check if click was on drag handle or anchor dot
           const isGrabHandle = (e.target as HTMLElement).closest('[data-grab-handle="true"]');
@@ -147,7 +151,6 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
           setActiveNode(node.id);
         }}
         data-node-id={node.id}
-        style={{ position: 'relative', zIndex: 1 }} // Ensure proper stacking context
       >
         {/* Always show right anchor dot for the explore node */}
         <AnchorDot 
@@ -155,58 +158,76 @@ export default function ExploreNode({ node, isActive }: ExploreNodeProps): React
           position="right" 
         />
         
-        <CardContent className="p-4 space-y-4">
-          {/* Node title */}
-          {node.content && (
-            <div className="text-sm font-medium break-words">
-              {node.content}
-            </div>
-          )}
-          
-          {/* Show question and answer */}
-          {node.question && (
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground font-medium">
-                {node.question}
+        <CardContent className="p-0">
+          {/* Node content */}
+          {node.question ? (
+            <>
+              <div className="p-3">
+                <h3 className="text-lg font-bold break-words">
+                  {node.question}
+                </h3>
               </div>
-              <div className="text-xs">{node.content}</div>
-            </div>
-          )}
-          
-          {/* Thinking/loading state */}
-          {showThinking && (
-            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-              <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              <div>Thinking...</div>
-            </div>
-          )}
-          
-          {/* Question input */}
-          <div className="relative mt-2">
-            <Input
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a question..."
-              className="pr-10 text-sm"
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-            />
-            <div className="absolute inset-y-0 right-0 flex items-center">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={() => handleExplore()}
-                disabled={!question.trim() || isLoading}
-              >
-                {isLoading ? (
-                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <div className="px-3">
+                <div className="h-px bg-border/60" />
+              </div>
+              <div className="p-3">
+                {showThinking ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      <div className="text-base animate-pulse">Pondering your question...</div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-muted/50 rounded animate-pulse w-3/4" />
+                      <div className="h-4 bg-muted/50 rounded animate-pulse w-1/2" />
+                      <div className="h-4 bg-muted/50 rounded animate-pulse w-5/6" />
+                    </div>
+                  </div>
                 ) : (
-                  <Send className="h-3 w-3" />
+                  <p className="text-base font-medium break-words">
+                    {node.content}
+                  </p>
                 )}
-              </Button>
+              </div>
+            </>
+          ) : (
+            <div className="p-3">
+              {/* Initial state with input */}
+              <div className="relative">
+                <Input
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder="Ask a question..."
+                  className="pr-10 text-sm"
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading}
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={() => handleExplore()}
+                    disabled={!question.trim() || isLoading}
+                  >
+                    {isLoading ? (
+                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Thinking/loading state */}
+              {showThinking && (
+                <div className="flex items-center justify-center space-x-2 text-sm text-muted-foreground p-4 bg-muted/50 rounded-lg animate-in fade-in duration-300 mt-3">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <div>Exploring your question...</div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </>

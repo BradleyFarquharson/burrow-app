@@ -1,11 +1,15 @@
+import { NodeSize } from '@/config/nodeConfig';
+
 export interface Node {
   id: string;
-  content: string;
+  title: string;      // Short, concise title
+  content: string;    // Detailed content/description
   type: 'explore' | 'branch';
   position: {
     x: number;
     y: number;
   };
+  size: NodeSize;
   width?: number;
   height?: number;
   description?: string;

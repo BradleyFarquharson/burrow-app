@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExplorationStore } from '@/store/explorationStore';
-import { ChevronRight, MessageSquare, X, Trash2, Plus, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
+import { MessageSquare, X, Trash2, Plus, LogOut, Moon, Sun, Pencil, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
+import { Input } from '@/components/ui/input';
 
 interface ChatMessage {
   id: string;
@@ -20,10 +21,12 @@ export default function SidePanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [expandedExplorations, setExpandedExplorations] = useState<Record<string, boolean>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { signOut } = useAuth();
   const router = useRouter();
-  const { theme, toggleTheme, isLoaded, isChanging } = useTheme();
+  const { theme, toggleTheme, isLoaded } = useTheme();
   
   const { 
     nodes, 
@@ -34,7 +37,8 @@ export default function SidePanel() {
     createNewExploration,
     deleteExploration,
     deleteNode,
-    switchExploration
+    switchExploration,
+    updateExplorationTitle
   } = useExplorationStore();
   
   // Set mounted state after component mounts
@@ -134,16 +138,35 @@ export default function SidePanel() {
     Object.values(exploration.nodes).some(node => node.question)
   );
   
+  const handleStartEdit = (explorationId: string, currentTitle: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(explorationId);
+    setEditTitle(currentTitle);
+  };
+
+  const handleSaveTitle = (explorationId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (editTitle.trim()) {
+      updateExplorationTitle(explorationId, editTitle.trim());
+    }
+    setEditingId(null);
+  };
+
+  const handleKeyDown = (explorationId: string, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveTitle(explorationId);
+    } else if (e.key === 'Escape') {
+      setEditingId(null);
+    }
+  };
+  
   // Don't render content until client-side and theme is loaded
   if (!mounted || !isLoaded) {
     return <div className="fixed top-0 left-0 h-full z-10 w-14"></div>;
   }
   
   return (
-    <div className={cn(
-      "fixed top-0 left-0 h-full z-10 transition-all duration-300 ease-in-out",
-      isOpen ? "w-80" : "w-14"
-    )}>
+    <div className="sidebar-container">
       {/* Toggle button - only visible when sidebar is closed */}
       {!isOpen && (
         <Button 
@@ -157,125 +180,147 @@ export default function SidePanel() {
       )}
       
       {/* Panel content */}
-      <div className={cn(
-        "h-full bg-card border-r border-border shadow-lg transition-opacity flex flex-col",
-        isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-      )}>
-        {/* Header with title and close button on the right */}
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold">Exploration History</h2>
+      <div className={cn("sidebar-panel", isOpen && "open")}>
+        {/* Header */}
+        <div className="px-4 py-3 flex items-center justify-between">
+          <h2 className="text-lg font-medium">Burrow</h2>
           <Button 
             variant="ghost" 
             size="icon" 
-            className="h-8 w-8"
+            className="h-8 w-8 hover:bg-accent"
             onClick={() => setIsOpen(false)}
           >
             <X className="h-4 w-4" />
           </Button>
         </div>
-        
-        {/* Action buttons */}
-        <div className="p-3 border-b border-border flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex-1 gap-1"
-            onClick={handleNewExploration}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Exploration
-          </Button>
-        </div>
-        
-        <ScrollArea className="flex-1">
-          <div className="p-4 space-y-4">
-            {explorationsWithMessages.length > 0 ? (
-              explorationsWithMessages.map(([explorationId, exploration]) => (
-                <div 
-                  key={explorationId}
-                  className={cn(
-                    "rounded-md border border-border",
-                    currentExplorationId === explorationId ? "border-primary/50" : ""
-                  )}
-                >
-                  {/* Exploration header */}
-                  <div 
-                    className={cn(
-                      "p-2 flex items-center justify-between cursor-pointer hover:bg-accent rounded-t-md",
-                      currentExplorationId === explorationId ? "bg-accent/50" : ""
-                    )}
-                    onClick={() => handleSwitchExploration(explorationId)}
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 p-0"
-                        onClick={(e) => toggleExpansion(explorationId, e)}
-                      >
-                        <ChevronDown 
-                          className={cn(
-                            "h-4 w-4 transition-transform duration-200",
-                            !expandedExplorations[explorationId] && "-rotate-90"
-                          )} 
-                        />
-                      </Button>
-                      <span className="font-medium text-sm truncate max-w-[180px]">
-                        {getExplorationTitle(exploration)}
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => handleDeleteExploration(explorationId, e)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>No explorations yet</p>
-                <p className="text-xs mt-1">Start by asking a question</p>
-              </div>
-            )}
+
+        {/* Main content area */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* New exploration button */}
+          <div className="px-3 py-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full gap-1.5 font-medium"
+              onClick={() => {
+                createNewExploration();
+                setIsOpen(false);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              New Exploration
+            </Button>
           </div>
-        </ScrollArea>
-        
-        {/* Footer with theme toggle and logout button */}
-        <div className="p-3 border-t border-border mt-auto space-y-2">
-          {/* Theme toggle button */}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className={cn(
-              "w-full gap-2 text-muted-foreground hover:text-foreground",
-              isChanging && "opacity-70 pointer-events-none"
-            )}
-            onClick={toggleTheme}
-            disabled={isChanging}
-          >
-            {isChanging ? (
-              <>
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border-b-2 border-t-2 border-current"></div>
-                <span>Changing...</span>
-              </>
-            ) : theme === 'light' ? (
-              <>
-                <Moon className="h-3.5 w-3.5" />
-                <span>Dark Mode</span>
-              </>
-            ) : (
-              <>
-                <Sun className="h-3.5 w-3.5" />
-                <span>Light Mode</span>
-              </>
-            )}
-          </Button>
+
+          {/* Divider */}
+          <div className="px-4 py-2">
+            <div className="h-px bg-border/60" />
+          </div>
+
+          {/* Explorations list */}
+          <ScrollArea className="flex-1 px-3">
+            <div className="space-y-1 py-1">
+              {explorationsWithMessages.length > 0 ? (
+                explorationsWithMessages.map(([explorationId, exploration]) => (
+                  <div 
+                    key={explorationId}
+                    className={cn(
+                      "group rounded-md",
+                      currentExplorationId === explorationId ? "bg-accent" : "hover:bg-accent/50",
+                      "transition-colors"
+                    )}
+                  >
+                    <div 
+                      className="px-2 py-1.5 flex items-center cursor-pointer"
+                      onClick={() => handleSwitchExploration(explorationId)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        {editingId === explorationId ? (
+                          <Input
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => handleKeyDown(explorationId, e)}
+                            className="h-7 text-sm bg-background"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="block truncate text-sm">
+                            {getExplorationTitle(exploration)}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className={cn(
+                        "flex items-center gap-0.5 ml-2",
+                        "opacity-0 group-hover:opacity-100",
+                        "transition-opacity"
+                      )}>
+                        {editingId === explorationId ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 hover:bg-background"
+                            onClick={(e) => handleSaveTitle(explorationId, e)}
+                          >
+                            <span className="sr-only">Save</span>
+                            ✓
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 hover:bg-background"
+                            onClick={(e) => handleStartEdit(explorationId, getExplorationTitle(exploration), e)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 hover:bg-background hover:text-destructive"
+                          onClick={(e) => handleDeleteExploration(explorationId, e)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="px-2 py-8 text-center text-muted-foreground">
+                  <p className="text-sm">No explorations yet</p>
+                  <p className="text-xs mt-1">Start by creating a new exploration</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* Footer */}
+        <div className="px-3 py-3 border-t border-border">
+          <div className="flex items-center gap-2 mb-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full gap-2"
+              onClick={toggleTheme}
+            >
+              {theme === 'light' ? (
+                <>
+                  <Sun className="h-3.5 w-3.5" />
+                  <span>Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="h-3.5 w-3.5" />
+                  <span>Dark</span>
+                </>
+              )}
+            </Button>
+          </div>
           
-          {/* Logout button */}
           <Button 
             variant="outline" 
             size="sm" 
@@ -285,7 +330,7 @@ export default function SidePanel() {
           >
             {isLoggingOut ? (
               <>
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border-b-2 border-t-2 border-current"></div>
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 <span>Signing Out...</span>
               </>
             ) : (

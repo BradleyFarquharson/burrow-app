@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useExplorationStore } from '@/store/explorationStore';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, useMotionValue, useTransform, MotionValue, animate } from 'framer-motion';
@@ -15,6 +16,7 @@ import ZoomControls from './canvas/ZoomControls';
 import NodeConnections from './canvas/NodeConnections';
 import { ZoomProvider } from '@/contexts';
 import { cn } from '@/lib/utils';
+import CanvasContent from './canvas/CanvasContent';
 
 /**
  * Canvas Component
@@ -212,12 +214,12 @@ export default function Canvas(): React.ReactElement {
     if (e.ctrlKey || e.metaKey) {
       // More precise zoom for trackpad pinch
       const direction = e.deltaY < 0 ? 1 : -1; // -1 zoom out, 1 zoom in
-      const magnitude = Math.min(Math.abs(e.deltaY) / 30, 0.5); // Further increased sensitivity
-      zoomFactor = 1 + (direction * magnitude * 0.5); // Stronger zoom effect
+      const magnitude = Math.min(Math.abs(e.deltaY) / 100, 0.2); // Reduced sensitivity
+      zoomFactor = 1 + (direction * magnitude * 0.3); // Gentler zoom effect
     } else {
       // Standard mouse wheel zoom
       const direction = e.deltaY < 0 ? 1 : -1; // -1 zoom out, 1 zoom in
-      zoomFactor = 1 + (direction * 0.1); // Fixed 10% zoom steps for mouse wheel
+      zoomFactor = 1 + (direction * 0.05); // Reduced from 0.1 to 0.05 for gentler steps
     }
     
     // Always pass cursor position to zoom function
@@ -418,116 +420,7 @@ export default function Canvas(): React.ReactElement {
       return () => clearTimeout(timeoutId);
     }
   }, [activeNodeId, nodes, x, y, isClient, draggingNodeId]);
-  
-  /**
-   * Renders an individual node with its proper positioning and styling
-   * 
-   * Handles the visual representation and interaction handling for a single node,
-   * including transform positioning, scale adjustments, and interaction states.
-   * 
-   * @param node - The node data to render
-   * @returns React element representing the node with proper position and styling
-   */
-  const renderNode = (node: Node): React.ReactElement => {
-    const isActive = node.id === activeNodeId;
-    const isDragging = draggingNodeId === node.id;
-    
-    return (
-      <div 
-        key={node.id}
-        data-node-id={node.id}
-        className={cn(
-          isActive && "node-active" // Add node-active class when node is selected
-        )}
-        style={{ 
-          position: 'absolute',
-          left: node.position.x,
-          top: node.position.y,
-          transform: `translate(-50%, -50%)`,
-          transformOrigin: 'center',
-          cursor: isDragging ? 'grabbing' : 'pointer', // Changed from 'grab' to 'pointer' for non-drag handle areas
-          // All nodes have the same z-index unless being dragged
-          zIndex: isDragging ? 10 : 1,
-          // Only show shadow when dragging
-          filter: isDragging ? 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15))' : 'none',
-          willChange: 'transform',
-          transition: isDragging ? 'none' : 'filter 0.2s ease'
-        }}
-        onMouseDown={(e: React.MouseEvent): void => {
-          // Check if the click is on a drag handle
-          const target = e.target as HTMLElement;
-          const isGrabHandle = 
-            target.hasAttribute('data-grab-handle') || 
-            !!target.closest('[data-grab-handle="true"]');
-          
-          if (isGrabHandle) {
-            // If it's on a drag handle, completely stop propagation to prevent canvas dragging
-            // and ensure no other canvas interactions occur during drag
-            e.stopPropagation();
-            e.preventDefault();
-            
-            // Handle the node dragging behavior
-            handleNodeMouseDown(e, node);
-            return;
-          }
-          
-          // Otherwise, let the regular click handler in ExploreNode/BranchNode handle it
-        }}
-        onTouchStart={(e: React.TouchEvent): void => {
-          // Check if the touch is on a drag handle
-          const touch = e.touches[0];
-          const element = document.elementFromPoint(touch.clientX, touch.clientY);
-          const isGrabHandle = element?.closest('[data-grab-handle="true"]');
-          
-          if (isGrabHandle) {
-            // Stop propagation to prevent canvas dragging
-            e.stopPropagation();
-            e.preventDefault();
-            
-            // Convert touch event to mouse event for compatibility
-            const mouseEvent = {
-              clientX: touch.clientX,
-              clientY: touch.clientY,
-              stopPropagation: () => e.stopPropagation(),
-              target: element,
-              preventDefault: () => e.preventDefault(),
-              // Cast as any to avoid TypeScript errors with the limited event object
-            } as any;
-            handleNodeMouseDown(mouseEvent, node);
-          }
-        }}
-      >
-        {node.type === 'explore' ? (
-          <ExploreNode
-            node={node}
-            isActive={isActive}
-          />
-        ) : (
-          <BranchNode
-            node={node}
-            isActive={isActive}
-          />
-        )}
-      </div>
-    );
-  };
-  
-  // Memoize the nodes to prevent unnecessary re-renders
-  const memoizedNodes = useMemo<React.ReactElement[]>(() => {
-    return Object.values(nodes).map((node) => (
-      <div key={node.id}>
-        {renderNode(node)}
-      </div>
-    ));
-  }, [
-    nodes, 
-    activeNodeId, 
-    draggingNodeId, 
-    displayScale,
-    handleNodeMouseDown
-    // Exclude scale since we already use displayScale which is derived from it
-  ]);
-  
+
   // Wrap everything in the ZoomProvider
   return (
     <ZoomProvider scale={scale} x={x} y={y} nodes={nodes}>
@@ -569,11 +462,12 @@ export default function Canvas(): React.ReactElement {
                 willChange: 'transform'
               }}
             >
-              {/* Draw connection lines between nodes */}
-              <NodeConnections />
-              
-              {/* Draw nodes */}
-              {memoizedNodes}
+              <CanvasContent 
+                nodes={nodes}
+                activeNodeId={activeNodeId}
+                draggingNodeId={draggingNodeId}
+                handleNodeMouseDown={handleNodeMouseDown}
+              />
             </motion.div>
             
             {/* Zoom Controls - fixed position */}

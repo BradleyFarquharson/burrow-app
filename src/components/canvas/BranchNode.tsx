@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import DragHandle from './DragHandle';
 import AnchorDot from './AnchorDot';
 import { useZoom } from '@/contexts';
+import { getNodeSizeClasses, getNodeMaxHeight } from '@/config/nodeConfig';
 
 /**
  * Props for the BranchNode component
@@ -38,101 +39,83 @@ export default function BranchNode({ node, isActive }: BranchNodeProps): React.R
     updateNodeContent, 
     setActiveNode,
     repositionOverlappingNodes,
-    hasChildNodes
+    hasChildNodes,
+    draggingNodeId
   } = useExplorationStore();
   const { generateIdeas, isLoading } = useGemini();
   const [expanded, setExpanded] = useState<boolean>(false);
   
-  // Check if this node has children
   const hasChildren = useMemo(() => hasChildNodes(node.id), [node.id, hasChildNodes]);
-  
-  // Get resetView function from our zoom context
   const { resetView } = useZoom();
   
-  /**
-   * Handle click on the node - only zoom without expanding
-   */
   const handleNodeClick = (e: React.MouseEvent) => {
-    // Check if click was on drag handle or anchor dot
     const isGrabHandle = (e.target as HTMLElement).closest('[data-grab-handle="true"]');
     const isAnchorDot = (e.target as HTMLElement).closest('[data-anchor-dot="true"]');
     
     if (isGrabHandle || isAnchorDot) {
-      // Don't activate the node if clicking on drag handle or anchor dot
       e.stopPropagation();
       return;
     }
     
-    e.stopPropagation(); // Prevent event from bubbling up to draggable handler
-    
-    // Set this as the active node and zoom to it
+    e.stopPropagation();
     setActiveNode(node.id);
     resetView(node.id);
   };
   
-  /**
-   * Generate sub-branches for this node using Gemini API
-   */
   const handleExplore = async (e: React.MouseEvent) => {
     e.stopPropagation();
     
-    // Create a question for this branch
-    const branchQuestion = `Tell me more about: ${node.content}`;
+    // Create a question that explores this specific subtopic
+    const branchQuestion = `Explore in detail: ${node.title}`;
     
-    // Save the question to the node
     updateNodeQuestion(node.id, branchQuestion);
     
-    // Call Gemini API to generate sub-branches for this node
     const { answer, branches } = await generateIdeas(branchQuestion, node.id);
     
-    // Update the node content with the answer
     updateNodeContent(node.id, answer);
-    
-    // Add branch nodes
     addBranchNodes(node.id, branches);
   };
-  
+
   return (
     <>
       <DragHandle nodeId={node.id} />
       
       <Card 
         className={cn(
-          "shadow-md relative transition-all duration-300 ease-in-out",
-          "card-container", // Add card-container class for glow effect
-          "w-60", // Fixed width for branch nodes
+          "shadow-md relative",
+          "card-container",
+          "w-[400px]",
           isActive && "ring-2 ring-primary",
-          "overflow-visible" // Ensure overflow is visible
+          "overflow-visible"
         )}
+        style={{ 
+          position: 'relative', 
+          zIndex: 1,
+          transition: 'filter 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease'
+        }}
         onClick={handleNodeClick}
         data-node-id={node.id}
-        style={{ position: 'relative', zIndex: 1 }} // Ensure proper stacking context
       >
-        {/* Always show left anchor dot (connection to parent) */}
-        <AnchorDot 
-          nodeId={node.id} 
-          position="left" 
-        />
-        
-        {/* Always show right anchor dot (connection to children) */}
-        <AnchorDot 
-          nodeId={node.id} 
-          position="right" 
-        />
+        <AnchorDot nodeId={node.id} position="left" />
+        <AnchorDot nodeId={node.id} position="right" />
         
         <CardContent className="p-0">
-          {/* Node header with title and expand/collapse button */}
-          <div className="p-3 border-b border-border flex items-center justify-between">
-            <h3 className="font-medium text-sm line-clamp-1">{node.content}</h3>
+          <div className="p-3 pr-6 flex items-center justify-between gap-2 relative">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold break-words">
+                {node.title}
+              </h3>
+            </div>
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-6 w-6 ml-1 flex-shrink-0"
+              className="h-6 w-6 flex-shrink-0 absolute top-3 right-3"
               onClick={(e) => {
                 e.stopPropagation();
                 setExpanded(!expanded);
-                // Add repositioning call when expanding/collapsing nodes
-                repositionOverlappingNodes(node.id, !expanded);
+                if (!draggingNodeId) {
+                  repositionOverlappingNodes(node.id, !expanded);
+                }
               }}
             >
               {expanded ? 
@@ -141,29 +124,30 @@ export default function BranchNode({ node, isActive }: BranchNodeProps): React.R
               }
             </Button>
           </div>
+          <div className="px-3">
+            {expanded && <div className="h-px bg-border/60" />}
+          </div>
           
-          {/* Expandable content area */}
-          <div className={cn(
-            "overflow-hidden transition-all duration-300",
-            expanded ? "max-h-60" : "max-h-0"
-          )}>
-            <div className="p-3 space-y-3">
-              {/* Display question and answer if they exist */}
-              {node.question && node.content && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground font-medium">
-                    {node.question}
-                  </p>
-                  <p className="text-xs">{node.content}</p>
-                </div>
+          <div 
+            className={cn(
+              "overflow-hidden transition-all duration-300"
+            )}
+            style={{
+              maxHeight: expanded ? 'none' : 0
+            }}
+          >
+            <div className="p-3 space-y-3 overflow-y-auto hover-scrollbar" 
+              style={{ 
+                maxHeight: expanded ? '600px' : '0px',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}>
+              {node.content && (
+                <p className="text-base font-medium break-words">
+                  {node.content}
+                </p>
               )}
               
-              {/* Node description if available */}
-              {node.description && !node.question && (
-                <p className="text-xs text-muted-foreground">{node.description}</p>
-              )}
-              
-              {/* Explore deeper button to generate sub-branches */}
               <Button 
                 size="sm"
                 variant="outline"
