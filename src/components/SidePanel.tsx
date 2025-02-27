@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExplorationStore } from '@/store/explorationStore';
-import { MessageSquare, X, Trash2, Plus, LogOut, Moon, Sun, Pencil, Settings } from 'lucide-react';
+import { MessageSquare, X, Trash2, Plus, LogOut, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useTheme } from '@/contexts/ThemeContext';
 import { Input } from '@/components/ui/input';
+import { ThemeCustomizer } from '@/components/ThemeCustomizer';
 
 interface ChatMessage {
   id: string;
@@ -26,7 +26,6 @@ export default function SidePanel() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { signOut } = useAuth();
   const router = useRouter();
-  const { theme, toggleTheme, isLoaded } = useTheme();
   
   const { 
     nodes, 
@@ -161,7 +160,7 @@ export default function SidePanel() {
   };
   
   // Don't render content until client-side and theme is loaded
-  if (!mounted || !isLoaded) {
+  if (!mounted) {
     return <div className="fixed top-0 left-0 h-full z-10 w-14"></div>;
   }
   
@@ -300,31 +299,12 @@ export default function SidePanel() {
 
         {/* Footer */}
         <div className="px-3 py-3 border-t border-border">
-          <div className="flex items-center gap-2 mb-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="w-full gap-2"
-              onClick={toggleTheme}
-            >
-              {theme === 'light' ? (
-                <>
-                  <Sun className="h-3.5 w-3.5" />
-                  <span>Light</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="h-3.5 w-3.5" />
-                  <span>Dark</span>
-                </>
-              )}
-            </Button>
-          </div>
+          <ThemeCustomizer />
           
           <Button 
             variant="outline" 
             size="sm" 
-            className="w-full gap-2 text-muted-foreground hover:text-foreground"
+            className="w-full gap-2 text-muted-foreground hover:text-foreground mt-2"
             onClick={handleLogout}
             disabled={isLoggingOut}
           >
