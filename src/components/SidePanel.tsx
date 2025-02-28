@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExplorationStore } from '@/store/explorationStore';
-import { MessageSquare, X, Trash2, Plus, LogOut, Pencil } from 'lucide-react';
+import { MessageSquare, X, Trash2, Plus, LogOut, Moon, Sun, Pencil, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Input } from '@/components/ui/input';
-import { ThemeCustomizer } from '@/components/ThemeCustomizer';
 
 interface ChatMessage {
   id: string;
@@ -26,6 +26,7 @@ export default function SidePanel() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { signOut } = useAuth();
   const router = useRouter();
+  const { theme, toggleTheme, isLoaded } = useTheme();
   
   const { 
     nodes, 
@@ -160,7 +161,7 @@ export default function SidePanel() {
   };
   
   // Don't render content until client-side and theme is loaded
-  if (!mounted) {
+  if (!mounted || !isLoaded) {
     return <div className="fixed top-0 left-0 h-full z-10 w-14"></div>;
   }
   
@@ -217,30 +218,30 @@ export default function SidePanel() {
           </div>
 
           {/* Explorations list */}
-          <ScrollArea className="flex-1 px-3">
-            <div className="space-y-1 py-1">
+          <ScrollArea className="flex-1 w-full">
+            <div className="space-y-1 py-1 px-3">
               {explorationsWithMessages.length > 0 ? (
                 explorationsWithMessages.map(([explorationId, exploration]) => (
                   <div 
                     key={explorationId}
                     className={cn(
-                      "group rounded-md",
+                      "group rounded-md w-full overflow-hidden",
                       currentExplorationId === explorationId ? "bg-accent" : "hover:bg-accent/50",
                       "transition-colors"
                     )}
                   >
                     <div 
-                      className="px-2 py-1.5 flex items-center cursor-pointer"
+                      className="px-2 py-1.5 flex items-center cursor-pointer w-full"
                       onClick={() => handleSwitchExploration(explorationId)}
                     >
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 overflow-hidden">
                         {editingId === explorationId ? (
                           <Input
                             value={editTitle}
                             onChange={(e) => setEditTitle(e.target.value)}
                             onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => handleKeyDown(explorationId, e)}
-                            className="h-7 text-sm bg-background"
+                            className="h-7 text-sm bg-background w-full"
                             autoFocus
                           />
                         ) : (
@@ -249,39 +250,22 @@ export default function SidePanel() {
                           </span>
                         )}
                       </div>
-                      
-                      <div className={cn(
-                        "flex items-center gap-0.5 ml-2",
-                        "opacity-0 group-hover:opacity-100",
-                        "transition-opacity"
-                      )}>
-                        {editingId === explorationId ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 hover:bg-background"
-                            onClick={(e) => handleSaveTitle(explorationId, e)}
-                          >
-                            <span className="sr-only">Save</span>
-                            ✓
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 hover:bg-background"
-                            onClick={(e) => handleStartEdit(explorationId, getExplorationTitle(exploration), e)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 hover:bg-background hover:text-destructive"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          onClick={(e) => handleStartEdit(explorationId, getExplorationTitle(exploration), e)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive shrink-0"
                           onClick={(e) => handleDeleteExploration(explorationId, e)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -299,12 +283,31 @@ export default function SidePanel() {
 
         {/* Footer */}
         <div className="px-3 py-3 border-t border-border">
-          <ThemeCustomizer />
+          <div className="flex items-center gap-2 mb-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full gap-2"
+              onClick={toggleTheme}
+            >
+              {theme === 'light' ? (
+                <>
+                  <Sun className="h-3.5 w-3.5" />
+                  <span>Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="h-3.5 w-3.5" />
+                  <span>Dark</span>
+                </>
+              )}
+            </Button>
+          </div>
           
           <Button 
             variant="outline" 
             size="sm" 
-            className="w-full gap-2 text-muted-foreground hover:text-foreground mt-2"
+            className="w-full gap-2 text-muted-foreground hover:text-foreground"
             onClick={handleLogout}
             disabled={isLoggingOut}
           >

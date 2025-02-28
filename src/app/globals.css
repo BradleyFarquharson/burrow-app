@@ -349,6 +349,56 @@ svg, path, circle {
   flex-direction: column;
   transform: translateX(-100%);
   transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+/* Force all content to stay within bounds */
+.sidebar-panel * {
+  max-width: 100%;
+}
+
+.sidebar-panel .group {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sidebar-panel .group > div {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  box-sizing: border-box;
+}
+
+/* Make sure the text container takes remaining space but doesn't overflow */
+.sidebar-panel .group .flex-1 {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px; /* Reduced to ensure earlier truncation */
+  padding-right: 4px;
+}
+
+/* Ensure buttons stay visible and don't push content */
+.sidebar-panel .group .flex-shrink-0 {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  width: 60px;
+  justify-content: flex-end;
+  margin-left: auto; /* Ensure buttons stay at the end */
+}
+
+/* Input field specific rules */
+.sidebar-panel input {
+  width: calc(100% - 85px) !important;
+  max-width: calc(100% - 85px) !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-panel.open {
