@@ -230,11 +230,11 @@
   /* Node selection glow effect - applies to all node types */
   [data-node-id].node-active .card-container,
   [data-node-id].node-active {
-    /* Box shadow for the glow effect */
-    box-shadow: 0 0 15px 5px hsla(var(--muted-foreground)/0.12), 
-                0 0 6px 2px hsla(var(--muted-foreground)/0.15);
-    /* Subtle border glow */
-    border-color: hsla(var(--muted-foreground)/0.3);
+    /* Box shadow for the glow effect - reduced intensity */
+    box-shadow: 0 0 10px 3px hsla(var(--muted-foreground)/0.08), 
+                0 0 4px 1px hsla(var(--muted-foreground)/0.1);
+    /* Subtle border glow - slightly reduced opacity */
+    border-color: hsla(var(--muted-foreground)/0.25);
     /* Ensures smooth transition */
     transition: box-shadow 0.3s ease, border-color 0.3s ease;
     /* Match card border radius but only apply to the card itself */
@@ -254,10 +254,10 @@
   /* Dark mode adjustments for the glow */
   .dark [data-node-id].node-active .card-container,
   .dark [data-node-id].node-active {
-    /* More subtle glow for dark mode */
-    box-shadow: 0 0 18px 6px hsla(var(--primary)/0.1), 
-                0 0 8px 2px hsla(var(--primary)/0.15);
-    border-color: hsla(var(--primary)/0.35);
+    /* More subtle glow for dark mode - reduced intensity */
+    box-shadow: 0 0 12px 4px hsla(var(--primary)/0.07), 
+                0 0 5px 1px hsla(var(--primary)/0.1);
+    border-color: hsla(var(--primary)/0.3);
     /* Match card border radius */
     border-radius: calc(var(--radius) - 2px);
     /* Remove any overflow hidden that might be cutting off anchor dots */

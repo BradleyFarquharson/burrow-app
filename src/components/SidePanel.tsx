@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExplorationStore } from '@/store/explorationStore';
-import { MessageSquare, X, Trash2, Plus, LogOut, Moon, Sun, Pencil, Settings } from 'lucide-react';
+import { ChevronRight, X, Trash2, Plus, LogOut, Moon, Sun, Pencil, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -171,11 +171,11 @@ export default function SidePanel() {
       {!isOpen && (
         <Button 
           variant="ghost" 
-          size="lg" 
+          size="icon" 
           className="absolute top-4 left-3 z-20 shadow-md rounded-md h-10 w-10 flex items-center justify-center bg-card border border-border"
           onClick={() => setIsOpen(true)}
         >
-          <MessageSquare className="h-5 w-5" />
+          <ChevronRight className="h-9 w-9" />
         </Button>
       )}
       

@@ -17,6 +17,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Burrow - Explore Ideas",
   description: "A visual exploration tool for brainstorming and organizing ideas",
+  icons: {
+    icon: [
+      {
+        url: "/favicon.svg",
+        type: "image/svg+xml",
+      }
+    ],
+    apple: [
+      {
+        url: "/favicon.svg",
+        type: "image/svg+xml",
+      }
+    ]
+  },
+  manifest: "/manifest.json"
 };
 
 export default function RootLayout({
