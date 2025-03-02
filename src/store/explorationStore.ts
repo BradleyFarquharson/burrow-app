@@ -169,7 +169,7 @@ const createDefaultExploration = (): Exploration => {
   const id = uuidv4();
   return {
     id,
-    title: "Untitled Exploration",
+    title: '', // Empty title initially - will be set when first question is added
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     nodes: {
@@ -258,49 +258,36 @@ const useExplorationStore = create<ExplorationState>()(
         
         updateNodeQuestion: (nodeId, question) => {
           set((state) => {
-            const updatedNodes = {
-              ...state.nodes,
-              [nodeId]: {
-                ...state.nodes[nodeId],
-                question,
-              },
+            const { nodes, currentExplorationId, explorations } = state;
+            const updatedNodes = { ...nodes };
+            
+            // Only update if node exists
+            if (!updatedNodes[nodeId]) {
+              return state;
+            }
+            
+            // Update node question
+            updatedNodes[nodeId] = {
+              ...updatedNodes[nodeId],
+              question,
             };
             
-            // Also update the current exploration
-            const { currentExplorationId, explorations } = state;
-            
-            if (!currentExplorationId) {
-              return {
+            // Update exploration title if this is the first question and exploration has no title or default title
+            let updatedExplorations = { ...explorations };
+            if (currentExplorationId) {
+              // Always update nodes in the exploration
+              updatedExplorations[currentExplorationId] = {
+                ...updatedExplorations[currentExplorationId],
                 nodes: updatedNodes,
-                explorations: state.explorations,
-              };
-            }
-            
-            const currentExploration = explorations[currentExplorationId];
-            
-            // If this is the first node with a question, or if we're updating the first questionable node,
-            // also update the exploration title to match the question
-            let title = currentExploration.title;
-            const nodesWithQuestions = Object.values(currentExploration.nodes)
-              .filter(node => node.question && node.question.trim() !== '');
-              
-            // If this is the first question or we're updating the first question node,
-            // use the question as the title
-            if (nodesWithQuestions.length === 0 || 
-                (nodesWithQuestions.length === 1 && nodesWithQuestions[0].id === nodeId) ||
-                title === "Untitled Exploration") {
-              title = question;
-            }
-            
-            const updatedExplorations = {
-              ...explorations,
-              [currentExplorationId]: {
-                ...explorations[currentExplorationId],
-                nodes: updatedNodes,
-                title: title, // Use the updated title
                 updatedAt: new Date().toISOString(),
+              };
+              
+              // Also update title if it's the first question or has default title
+              if (!updatedExplorations[currentExplorationId].title || 
+                  updatedExplorations[currentExplorationId].title.startsWith('Exploration ')) {
+                updatedExplorations[currentExplorationId].title = question;
               }
-            };
+            }
             
             return {
               nodes: updatedNodes,
@@ -496,35 +483,25 @@ const useExplorationStore = create<ExplorationState>()(
         },
         
         updateExplorationTitle: (explorationId, title) => {
-          // Get current state
-          const state = get();
-          const { explorations } = state;
-          
-          // Check if exploration exists
-          if (!explorations[explorationId]) {
-            console.error('Exploration not found:', explorationId);
-            return;
-          }
-          
-          // Create updated exploration
-          const updatedExploration = {
-            ...explorations[explorationId],
-            title,
-            updatedAt: new Date().toISOString(),
-          };
-          
-          // Create updated explorations
-          const updatedExplorations = {
-            ...explorations,
-            [explorationId]: updatedExploration
-          };
-          
-          // Log the update
-          console.log(`Updating exploration ${explorationId} title to: "${title}"`);
-          
-          // Update the state in a single set call
-          set({
-            explorations: updatedExplorations
+          set((state) => {
+            const { explorations } = state;
+            
+            if (!explorations[explorationId]) {
+              return state;
+            }
+
+            const updatedExplorations = {
+              ...explorations,
+              [explorationId]: {
+                ...explorations[explorationId],
+                title,
+                updatedAt: new Date().toISOString(),
+              }
+            };
+            
+            return {
+              explorations: updatedExplorations
+            };
           });
         },
         

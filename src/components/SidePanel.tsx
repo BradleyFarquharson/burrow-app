@@ -4,14 +4,12 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExplorationStore } from '@/store/explorationStore';
-import { ChevronRight, X, Trash2, Plus, LogOut, Moon, Sun, Pencil, Settings } from 'lucide-react';
+import { ChevronRight, X, Trash2, Plus, LogOut, Moon, Sun, Pencil, Settings, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Input } from '@/components/ui/input';
-import { Exploration, Node } from '@/types';
-import Image from 'next/image';
 
 interface ChatMessage {
   id: string;
@@ -108,23 +106,22 @@ export default function SidePanel() {
   };
   
   // Get a display title for an exploration based on its first meaningful node
-  const getExplorationTitle = (exploration: Exploration): string => {
-    // First, check if there's a custom title set
-    if (exploration.title && exploration.title.trim() !== '') {
+  const getExplorationTitle = (exploration: { title?: string; nodes: Record<string, { question?: string }> }): string => {
+    // First check for exploration title
+    if (exploration.title && exploration.title.trim()) {
       return exploration.title;
     }
-    
-    // If no custom title, find the first node with a question as a fallback
+
+    // Fall back to first node with a question if no title exists
     const nodesWithQuestions = Object.values(exploration.nodes)
-      .filter((node: Node) => node.question);
+      .filter((node) => node.question);
 
     if (nodesWithQuestions.length > 0) {
-      // Use the first node's question as the title
       return nodesWithQuestions[0].question || '';
     }
 
-    // Fallback to a default title if nothing else is available
-    return 'Untitled Exploration';
+    // Fallback to an empty string if no title or questions found
+    return '';
   };
   
   // Handle logout
@@ -153,19 +150,15 @@ export default function SidePanel() {
 
   const handleSaveTitle = (explorationId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    
-    // Only proceed if there's valid title text
-    if (editTitle && editTitle.trim()) {
-      const trimmedTitle = editTitle.trim();
-      
-      // Log for debugging
-      console.log(`Saving title for exploration ${explorationId}: "${trimmedTitle}"`);
-      
-      // Update the title in the store
-      updateExplorationTitle(explorationId, trimmedTitle);
+    if (editTitle.trim()) {
+      updateExplorationTitle(explorationId, editTitle.trim());
     }
-    
-    // Clear editing state regardless of whether save happened
+    setEditingId(null);
+    setEditTitle('');
+  };
+
+  const handleCancelEdit = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    e?.stopPropagation();
     setEditingId(null);
     setEditTitle('');
   };
@@ -174,7 +167,7 @@ export default function SidePanel() {
     if (e.key === 'Enter') {
       handleSaveTitle(explorationId);
     } else if (e.key === 'Escape') {
-      setEditingId(null);
+      handleCancelEdit();
     }
   };
   
@@ -252,40 +245,91 @@ export default function SidePanel() {
                       className="px-2 py-1.5 flex items-center cursor-pointer w-full"
                       onClick={() => handleSwitchExploration(explorationId)}
                     >
-                      <div className="flex-1 min-w-0 overflow-hidden">
-                        {editingId === explorationId ? (
-                          <Input
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => handleKeyDown(explorationId, e)}
-                            className="h-7 text-sm bg-background w-full"
-                            autoFocus
-                          />
-                        ) : (
-                          <span className="block truncate text-sm">
-                            {getExplorationTitle(exploration)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                          onClick={(e) => handleStartEdit(explorationId, getExplorationTitle(exploration), e)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive shrink-0"
-                          onClick={(e) => handleDeleteExploration(explorationId, e)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      {editingId === explorationId ? (
+                        <>
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <Input
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => handleKeyDown(explorationId, e)}
+                              className="h-7 text-sm bg-background w-full border-input"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 hover:bg-accent"
+                              onClick={(e) => handleSaveTitle(explorationId, e)}
+                            >
+                              <svg 
+                                xmlns="http://www.w3.org/2000/svg" 
+                                width="16" 
+                                height="16" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="2" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round" 
+                                className="text-foreground"
+                              >
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 hover:bg-accent"
+                              onClick={handleCancelEdit}
+                            >
+                              <svg 
+                                xmlns="http://www.w3.org/2000/svg" 
+                                width="16" 
+                                height="16" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="2" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round" 
+                                className="text-foreground"
+                              >
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                              </svg>
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <span className="block truncate text-sm">
+                              {getExplorationTitle(exploration)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              onClick={(e) => handleStartEdit(explorationId, getExplorationTitle(exploration), e)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive shrink-0"
+                              onClick={(e) => handleDeleteExploration(explorationId, e)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))

@@ -27,7 +27,7 @@ export default function DragHandle({ nodeId }: DragHandleProps): React.ReactElem
       className={cn(
         "absolute w-20 h-6 top-0 left-1/2 -translate-x-1/2 -translate-y-10",
         "flex items-center justify-center cursor-grab",
-        "bg-card border border-border rounded-md shadow-md"
+        "bg-foreground border border-border rounded-md shadow-md"
       )}
       data-grab-handle="true"
       data-node-id={nodeId}
@@ -40,7 +40,7 @@ export default function DragHandle({ nodeId }: DragHandleProps): React.ReactElem
       {/* Make the icon fill the entire width of the handle for better grabbing */}
       <div className="w-full h-full flex items-center justify-center" data-grab-handle="true">
         <GripHorizontal 
-          className="h-4 w-4 text-muted-foreground pointer-events-none" 
+          className="h-4 w-4 text-card pointer-events-none" 
           data-grab-handle="true"
         />
       </div>
