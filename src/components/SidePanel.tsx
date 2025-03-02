@@ -10,6 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Input } from '@/components/ui/input';
+import { Exploration, Node } from '@/types';
+import Image from 'next/image';
 
 interface ChatMessage {
   id: string;
@@ -106,18 +108,23 @@ export default function SidePanel() {
   };
   
   // Get a display title for an exploration based on its first meaningful node
-  const getExplorationTitle = (exploration: { nodes: Record<string, { question?: string }> }): string => {
-    // Find the first node with a question
+  const getExplorationTitle = (exploration: Exploration): string => {
+    // First, check if there's a custom title set
+    if (exploration.title && exploration.title.trim() !== '') {
+      return exploration.title;
+    }
+    
+    // If no custom title, find the first node with a question as a fallback
     const nodesWithQuestions = Object.values(exploration.nodes)
-      .filter((node) => node.question);
+      .filter((node: Node) => node.question);
 
     if (nodesWithQuestions.length > 0) {
       // Use the first node's question as the title
       return nodesWithQuestions[0].question || '';
     }
 
-    // Fallback to an empty string if no question is found
-    return '';
+    // Fallback to a default title if nothing else is available
+    return 'Untitled Exploration';
   };
   
   // Handle logout
@@ -146,10 +153,21 @@ export default function SidePanel() {
 
   const handleSaveTitle = (explorationId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (editTitle.trim()) {
-      updateExplorationTitle(explorationId, editTitle.trim());
+    
+    // Only proceed if there's valid title text
+    if (editTitle && editTitle.trim()) {
+      const trimmedTitle = editTitle.trim();
+      
+      // Log for debugging
+      console.log(`Saving title for exploration ${explorationId}: "${trimmedTitle}"`);
+      
+      // Update the title in the store
+      updateExplorationTitle(explorationId, trimmedTitle);
     }
+    
+    // Clear editing state regardless of whether save happened
     setEditingId(null);
+    setEditTitle('');
   };
 
   const handleKeyDown = (explorationId: string, e: React.KeyboardEvent<HTMLInputElement>) => {

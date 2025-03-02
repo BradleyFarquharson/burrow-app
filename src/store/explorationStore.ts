@@ -470,19 +470,35 @@ const useExplorationStore = create<ExplorationState>()(
         },
         
         updateExplorationTitle: (explorationId, title) => {
-          set((state) => {
-            const { explorations } = state;
-            
-            return {
-              explorations: {
-                ...explorations,
-                [explorationId]: {
-                  ...explorations[explorationId],
-                  title,
-                  updatedAt: new Date().toISOString(),
-                }
-              }
-            };
+          // Get current state
+          const state = get();
+          const { explorations } = state;
+          
+          // Check if exploration exists
+          if (!explorations[explorationId]) {
+            console.error('Exploration not found:', explorationId);
+            return;
+          }
+          
+          // Create updated exploration
+          const updatedExploration = {
+            ...explorations[explorationId],
+            title,
+            updatedAt: new Date().toISOString(),
+          };
+          
+          // Create updated explorations
+          const updatedExplorations = {
+            ...explorations,
+            [explorationId]: updatedExploration
+          };
+          
+          // Log the update
+          console.log(`Updating exploration ${explorationId} title to: "${title}"`);
+          
+          // Update the state in a single set call
+          set({
+            explorations: updatedExplorations
           });
         },
         
