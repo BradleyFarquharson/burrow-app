@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// You'll need to get your API key from Google AI Studio
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// Use a public API key that's restricted by HTTP referrer
+// This is a workaround for production without Firebase Functions
+const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 // Updated to use gemini-2.0-flash model
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
 
