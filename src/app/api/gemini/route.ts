@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// You'll need to get your API key from Google AI Studio
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// Log API key details for debugging (without exposing the full key)
+const API_KEY = process.env.GEMINI_API_KEY;
+const API_KEY_LENGTH = API_KEY ? API_KEY.length : 0;
+console.log(`GEMINI_API_KEY is ${API_KEY ? 'set' : 'NOT SET'} with length ${API_KEY_LENGTH}`);
+
 // Updated to use gemini-2.0-flash model
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
 
@@ -9,7 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     const { prompt } = await request.json();
     
-    if (!GEMINI_API_KEY) {
+    if (!API_KEY) {
       console.error('GEMINI_API_KEY is not set');
       return NextResponse.json(
         {
@@ -22,7 +25,7 @@ export async function POST(request: NextRequest) {
             }
           ]
         },
-        { status: 500 }
+        { status: 200 } // Return 200 to gracefully handle on client
       );
     }
     
@@ -82,7 +85,7 @@ Ensure clarity, depth, and relevance in all responses while maintaining this str
 `;
     
     // Call Gemini API with updated request format for gemini-2.0-flash
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`${GEMINI_API_URL}?key=${API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

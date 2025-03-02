@@ -169,12 +169,13 @@ const createDefaultExploration = (): Exploration => {
   const id = uuidv4();
   return {
     id,
-    title: `Exploration ${new Date().toLocaleString()}`,
+    title: "Untitled Exploration",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     nodes: {
       explore: {
         id: 'explore',
+        title: 'Start exploring',
         content: 'Start your exploration here...',
         type: 'explore',
         position: { x: DEFAULT_X, y: DEFAULT_Y },
@@ -267,14 +268,39 @@ const useExplorationStore = create<ExplorationState>()(
             
             // Also update the current exploration
             const { currentExplorationId, explorations } = state;
-            const updatedExplorations = currentExplorationId ? {
+            
+            if (!currentExplorationId) {
+              return {
+                nodes: updatedNodes,
+                explorations: state.explorations,
+              };
+            }
+            
+            const currentExploration = explorations[currentExplorationId];
+            
+            // If this is the first node with a question, or if we're updating the first questionable node,
+            // also update the exploration title to match the question
+            let title = currentExploration.title;
+            const nodesWithQuestions = Object.values(currentExploration.nodes)
+              .filter(node => node.question && node.question.trim() !== '');
+              
+            // If this is the first question or we're updating the first question node,
+            // use the question as the title
+            if (nodesWithQuestions.length === 0 || 
+                (nodesWithQuestions.length === 1 && nodesWithQuestions[0].id === nodeId) ||
+                title === "Untitled Exploration") {
+              title = question;
+            }
+            
+            const updatedExplorations = {
               ...explorations,
               [currentExplorationId]: {
                 ...explorations[currentExplorationId],
                 nodes: updatedNodes,
+                title: title, // Use the updated title
                 updatedAt: new Date().toISOString(),
               }
-            } : explorations;
+            };
             
             return {
               nodes: updatedNodes,

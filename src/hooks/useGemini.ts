@@ -12,6 +12,8 @@ export function useGemini() {
   const generateIdeas = async (question: string, parentId?: string) => {
     setIsLoading(true);
     try {
+      console.log('Sending question to Gemini API:', question);
+      
       const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: {
@@ -22,10 +24,12 @@ export function useGemini() {
 
       // Check if the response is OK
       if (!response.ok) {
+        console.error(`API error: ${response.status} ${response.statusText}`);
         throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('Received data from Gemini API:', data);
       
       // Validate the response structure
       if (!data || !data.answer || !Array.isArray(data.branches)) {
